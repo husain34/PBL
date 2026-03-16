@@ -2,9 +2,9 @@ const express = require("express");
 const jwt = require("jsonwebtoken");
 const Income = require("../models/Income");
 const User = require("../models/User");
-
+ 
 const router = express.Router();
-
+ 
 function authMiddleware(req, res, next) {
   const authHeader = req.headers.authorization;
   if (!authHeader || !authHeader.startsWith("Bearer "))
@@ -17,8 +17,8 @@ function authMiddleware(req, res, next) {
     return res.status(401).json({ message: "Invalid token" });
   }
 }
-
-// POST /api/income — add new income entry
+ 
+// POST /api/income — add new income, add full amount to savings pot
 router.post("/", authMiddleware, async (req, res) => {
   const { amount, source, frequency, date, note } = req.body;
   if (!amount || !source || !frequency || !date)
@@ -26,19 +26,25 @@ router.post("/", authMiddleware, async (req, res) => {
   try {
     const entry = await Income.create({
       userId: req.userId,
-      amount,
+      amount: Number(amount),
       source,
       frequency,
       date,
       note: note || "",
     });
+ 
+    // Add income amount to savings pot
+    await User.findByIdAndUpdate(req.userId, {
+      $inc: { savingsPot: Number(amount) },
+    });
+ 
     res.status(201).json(entry);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
-
-// GET /api/income — fetch all income entries for user
+ 
+// GET /api/income
 router.get("/", authMiddleware, async (req, res) => {
   try {
     const entries = await Income.find({ userId: req.userId }).sort({ date: -1 });
@@ -47,32 +53,29 @@ router.get("/", authMiddleware, async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
-
-// GET /api/income/summary — aggregated stats
+ 
+// GET /api/income/summary
 router.get("/summary", authMiddleware, async (req, res) => {
   try {
     const now = new Date();
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
     const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-
-    // This month's income
+ 
     const thisMonthEntries = await Income.find({
       userId: req.userId,
       date: { $gte: startOfMonth, $lte: endOfMonth },
     });
     const thisMonthTotal = thisMonthEntries.reduce((s, e) => s + e.amount, 0);
-
-    // All entries for monthly chart (last 6 months)
+ 
     const sixMonthsAgo = new Date();
     sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 5);
     sixMonthsAgo.setDate(1);
-
+ 
     const allEntries = await Income.find({
       userId: req.userId,
       date: { $gte: sixMonthsAgo },
     });
-
-    // Build month-by-month totals
+ 
     const monthMap = {};
     for (let i = 5; i >= 0; i--) {
       const d = new Date();
@@ -86,44 +89,35 @@ router.get("/summary", authMiddleware, async (req, res) => {
       if (monthMap[key]) monthMap[key].total += e.amount;
     });
     const monthlyChart = Object.values(monthMap);
-
-    // Source breakdown (all time)
+ 
     const allUserEntries = await Income.find({ userId: req.userId });
     const sourceMap = {};
     allUserEntries.forEach((e) => {
       sourceMap[e.source] = (sourceMap[e.source] || 0) + e.amount;
     });
-    const sourceBreakdown = Object.entries(sourceMap).map(([source, total]) => ({
-      source,
-      total,
-    }));
-
-    // Distinct source count
+    const sourceBreakdown = Object.entries(sourceMap).map(([source, total]) => ({ source, total }));
     const distinctSources = [...new Set(allUserEntries.map((e) => e.source))].length;
-
-    // Projected annual (this month × 12)
     const projectedAnnual = thisMonthTotal * 12;
-
-    // User's declared income target from profile
-    const user = await User.findById(req.userId).select("monthlyIncomeTarget profileAnswers");
-    const declaredIncome = user?.monthlyIncomeTarget || null;
+ 
+    const user = await User.findById(req.userId).select("savingsPot profileAnswers");
     const profileIncome = user?.profileAnswers?.monthlyIncome || null;
-
+    const savingsPot = user?.savingsPot || 0;
+ 
     res.json({
       thisMonthTotal,
       projectedAnnual,
       distinctSources,
       monthlyChart,
       sourceBreakdown,
-      declaredIncome,
       profileIncome,
+      savingsPot,
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
-
-// DELETE /api/income/:id — delete an entry
+ 
+// DELETE /api/income/:id — delete entry and deduct from savings pot
 router.delete("/:id", authMiddleware, async (req, res) => {
   try {
     const entry = await Income.findOneAndDelete({
@@ -131,10 +125,16 @@ router.delete("/:id", authMiddleware, async (req, res) => {
       userId: req.userId,
     });
     if (!entry) return res.status(404).json({ message: "Entry not found" });
+ 
+    // Deduct from savings pot (floor at 0)
+    const user = await User.findById(req.userId);
+    user.savingsPot = Math.max(0, (user.savingsPot || 0) - entry.amount);
+    await user.save();
+ 
     res.json({ message: "Deleted" });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
-
+ 
 module.exports = router;

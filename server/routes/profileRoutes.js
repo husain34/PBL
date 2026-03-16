@@ -4,7 +4,7 @@ const User = require("../models/User");
 
 const router = express.Router();
 
-// Middleware to verify JWT
+
 function authMiddleware(req, res, next) {
   const authHeader = req.headers.authorization;
   if (!authHeader || !authHeader.startsWith("Bearer ")) {
@@ -20,8 +20,7 @@ function authMiddleware(req, res, next) {
   }
 }
 
-// POST /api/profile/submit
-// Save questionnaire answers + computed profiles
+
 router.post("/submit", authMiddleware, async (req, res) => {
   const { answers, investorType, spenderType } = req.body;
 
@@ -53,8 +52,7 @@ router.post("/submit", authMiddleware, async (req, res) => {
   }
 });
 
-// GET /api/profile
-// Fetch the current user's profile
+
 router.get("/", authMiddleware, async (req, res) => {
   try {
     const user = await User.findById(req.userId).select(

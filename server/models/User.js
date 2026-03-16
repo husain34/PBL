@@ -1,15 +1,12 @@
 const mongoose = require("mongoose");
-
+ 
 const userSchema = new mongoose.Schema({
   name: { type: String, required: true },
   email: { type: String, required: true, unique: true },
   password: { type: String, required: true },
-
-  
-
+ 
   profileCompleted: { type: Boolean, default: false },
-
-  
+ 
   investorType: {
     type: String,
     enum: ["Conservative", "Moderate", "Aggressive"],
@@ -20,8 +17,7 @@ const userSchema = new mongoose.Schema({
     enum: ["Disciplined", "Moderate Spender", "Impulsive"],
     default: null,
   },
-
-  
+ 
   profileAnswers: {
     ageRange: { type: String, default: null },
     employmentStatus: { type: String, default: null },
@@ -34,7 +30,9 @@ const userSchema = new mongoose.Schema({
     investmentHorizon: { type: String, default: null },
     primaryFinancialGoal: { type: String, default: null },
   },
+ 
+  // Savings pot — running balance of unallocated savings
+  savingsPot: { type: Number, default: 0 },
 });
-
+ 
 module.exports = mongoose.model("User", userSchema);
-
