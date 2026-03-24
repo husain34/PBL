@@ -22,6 +22,20 @@ function formatMonthKey(key) {
   return new Date(year, month - 1).toLocaleString("default", { month: "short", year: "2-digit" });
 }
 
+// Custom label for donut chart slices
+const renderCustomLabel = ({ cx, cy, midAngle, innerRadius, outerRadius, percent }) => {
+  if (percent < 0.04) return null;
+  const RADIAN = Math.PI / 180;
+  const radius = innerRadius + (outerRadius - innerRadius) * 0.6;
+  const x = cx + radius * Math.cos(-midAngle * RADIAN);
+  const y = cy + radius * Math.sin(-midAngle * RADIAN);
+  return (
+    <text x={x} y={y} fill="white" textAnchor="middle" dominantBaseline="central" fontSize={11} fontWeight="600">
+      {`${(percent * 100).toFixed(0)}%`}
+    </text>
+  );
+};
+
 const PAYMENT_MODES = ["Cash", "UPI", "Card", "Net Banking", "Other"];
 const EMPTY_FORM = {
   amount: "", categoryId: "", date: new Date().toISOString().split("T")[0],
@@ -43,6 +57,7 @@ export default function ExpensePage() {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [activeTab, setActiveTab] = useState("add");
+  const [recurringNotice, setRecurringNotice] = useState("");
 
   const token = localStorage.getItem("token");
   const headers = { Authorization: `Bearer ${token}` };
@@ -64,11 +79,25 @@ export default function ExpensePage() {
     }
   }, [selectedMonth]);
 
+  // On mount: trigger recurring expense auto-population
+  useEffect(() => {
+    axios.post(`${API}/expenses/apply-recurring`, {}, { headers })
+      .then((res) => {
+        if (res.data.applied > 0)
+          setRecurringNotice(`${res.data.applied} recurring expense(s) auto-added for this month.`);
+      })
+      .catch(() => {});
+  }, []);
+
   useEffect(() => { fetchAll(); }, [fetchAll]);
 
   const handleSubmit = async () => {
     if (!form.amount || !form.categoryId || !form.date) {
       setError("Please fill in amount, category and date."); return;
+    }
+    if (analytics && Number(form.amount) > analytics.savingsPot) {
+      setError(`Amount exceeds your savings pot balance of ${formatFullINR(analytics.savingsPot)}.`);
+      return;
     }
     setSubmitting(true); setError(""); setSuccess("");
     try {
@@ -108,8 +137,7 @@ export default function ExpensePage() {
     } catch { setError("Cannot delete default category."); }
   };
 
-  const monthChange = analytics
-    ? analytics.thisTotal - analytics.prevTotal : 0;
+  const monthChange = analytics ? analytics.thisTotal - analytics.prevTotal : 0;
   const monthChangePercent = analytics?.prevTotal
     ? ((monthChange / analytics.prevTotal) * 100).toFixed(1) : null;
 
@@ -119,6 +147,14 @@ export default function ExpensePage() {
         <h1 className="text-3xl font-bold">Expense Tracker</h1>
         <p className="text-muted-foreground mt-1 text-sm">Track, categorize and analyze your spending.</p>
       </div>
+
+      {/* Recurring notice */}
+      {recurringNotice && (
+        <div className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-700 flex items-center justify-between">
+          <span>{recurringNotice}</span>
+          <button onClick={() => setRecurringNotice("")} className="text-blue-400 hover:text-blue-600 ml-4">×</button>
+        </div>
+      )}
 
       {/* Summary Cards */}
       {analytics && (
@@ -131,17 +167,25 @@ export default function ExpensePage() {
             color={monthChange <= 0 ? "emerald" : "red"}
           />
           <SummaryCard
-            label="Net Savings"
+            label="Savings This Month"
             value={formatFullINR(analytics.netSavings)}
             sub="Income minus expenses"
             color={analytics.netSavings >= 0 ? "emerald" : "red"}
           />
           <SummaryCard
-            label="Biggest Category"
-            value={analytics.categoryBreakdown[0]?.name || "—"}
-            sub={analytics.categoryBreakdown[0] ? formatFullINR(analytics.categoryBreakdown[0].total) : null}
-            color="violet"
+            label="Overall Savings"
+            value={formatFullINR(analytics.overallSavings)}
+            sub="All-time income minus expenses"
+            color={analytics.overallSavings >= 0 ? "emerald" : "red"}
           />
+        </div>
+      )}
+
+      {/* Savings pot indicator */}
+      {analytics && (
+        <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800 flex items-center justify-between">
+          <span>Savings Pot Available: <strong>{formatFullINR(analytics.savingsPot)}</strong></span>
+          <span className="text-xs text-emerald-600">Expenses cannot exceed this balance</span>
         </div>
       )}
 
@@ -164,7 +208,8 @@ export default function ExpensePage() {
 
       {/* Tab: Add Expense */}
       {activeTab === "add" && (
-        <div className="max-w-md space-y-4">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+          {/* Form */}
           <div className="auth-card space-y-4">
             <h2 className="text-base font-semibold">Add Expense</h2>
 
@@ -177,6 +222,11 @@ export default function ExpensePage() {
                 value={form.amount}
                 onChange={(e) => setForm({ ...form, amount: e.target.value })}
               />
+              {analytics && form.amount && Number(form.amount) > analytics.savingsPot && (
+                <p className="text-xs text-red-500 mt-1">
+                  Exceeds savings pot ({formatFullINR(analytics.savingsPot)})
+                </p>
+              )}
             </div>
 
             <div className="space-y-1">
@@ -237,7 +287,7 @@ export default function ExpensePage() {
                 onChange={(e) => setForm({ ...form, isRecurring: e.target.checked })}
                 className="rounded"
               />
-              <span className="text-muted-foreground">Mark as recurring</span>
+              <span className="text-muted-foreground">Mark as recurring (auto-adds every month)</span>
             </label>
 
             {error && <p className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{error}</p>}
@@ -250,91 +300,119 @@ export default function ExpensePage() {
               }`}
             >{submitting ? "Saving..." : "+ Add Expense"}</button>
           </div>
+
+          {/* Daily spending chart on add tab */}
+          <div className="space-y-4">
+            <div className="auth-card">
+              <h2 className="text-sm font-semibold mb-4">Daily Spending This Month</h2>
+              {analytics?.dailySpending?.some((d) => d.total > 0) ? (
+                <ResponsiveContainer width="100%" height={220}>
+                  <LineChart data={analytics.dailySpending}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                    <XAxis dataKey="day" tick={{ fontSize: 10 }} />
+                    <YAxis tickFormatter={formatINR} tick={{ fontSize: 10 }} />
+                    <Tooltip
+                      formatter={(v) => formatFullINR(v)}
+                      labelFormatter={(d) => `Day ${d}`}
+                    />
+                    <Line
+                      type="monotone" dataKey="total" stroke="#3b82f6"
+                      strokeWidth={2} dot={false} name="Spent"
+                    />
+                  </LineChart>
+                </ResponsiveContainer>
+              ) : (
+                <p className="text-sm text-muted-foreground text-center py-10">
+                  No expenses logged this month yet.
+                </p>
+              )}
+            </div>
+          </div>
         </div>
       )}
 
       {/* Tab: Analytics */}
       {activeTab === "analytics" && analytics && (
         <div className="space-y-6">
-          {/* Month comparison */}
           <div className="auth-card">
-            <h2 className="text-sm font-semibold mb-4">Income vs Expenses — Last 6 Months</h2>
+            <h2 className="text-sm font-semibold mb-4">Income vs Expenses vs Goals — Last 6 Months</h2>
             <ResponsiveContainer width="100%" height={220}>
               <BarChart data={analytics.monthComparison}>
                 <XAxis dataKey="month" tickFormatter={formatMonthKey} tick={{ fontSize: 11 }} />
                 <YAxis tickFormatter={formatINR} tick={{ fontSize: 11 }} />
-                <Tooltip formatter={(v) => formatFullINR(v)} labelFormatter={formatMonthKey} />
+                <Tooltip
+                  formatter={(v, name, props) => {
+                    const income = props.payload?.income || 0;
+                    const pct = income > 0 ? ` (${((v / income) * 100).toFixed(1)}% of income)` : "";
+                    const label = name === "Income" ? formatFullINR(v) : `${formatFullINR(v)}${pct}`;
+                    return [label, name];
+                  }}
+                  labelFormatter={formatMonthKey}
+                />
                 <Legend />
                 <Bar dataKey="income" fill="#10b981" radius={[4, 4, 0, 0]} name="Income" />
                 <Bar dataKey="expenses" fill="#ef4444" radius={[4, 4, 0, 0]} name="Expenses" />
+                <Bar dataKey="goalsAllocated" fill="#8b5cf6" radius={[4, 4, 0, 0]} name="Allocated to Goals" />
               </BarChart>
             </ResponsiveContainer>
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Category breakdown */}
             {analytics.categoryBreakdown.length > 0 && (
               <div className="auth-card">
                 <h2 className="text-sm font-semibold mb-4">Spending by Category</h2>
-                <ResponsiveContainer width="100%" height={200}>
+                <ResponsiveContainer width="100%" height={220}>
                   <PieChart>
                     <Pie
                       data={analytics.categoryBreakdown}
                       dataKey="total" nameKey="name"
-                      cx="50%" cy="50%" outerRadius={75} innerRadius={40} paddingAngle={3}
+                      cx="50%" cy="50%"
+                      outerRadius={85} innerRadius={45}
+                      paddingAngle={2}
+                      labelLine={false}
+                      label={renderCustomLabel}
                     >
                       {analytics.categoryBreakdown.map((entry) => (
                         <Cell key={entry.name} fill={entry.color} />
                       ))}
                     </Pie>
                     <Legend />
-                    <Tooltip formatter={(v) => formatFullINR(v)} />
+                    <Tooltip formatter={(v, name) => {
+                      const total = analytics.thisTotal;
+                      const pct = total > 0 ? ((v / total) * 100).toFixed(1) : 0;
+                      return [`${formatFullINR(v)} (${pct}%)`, name];
+                    }} />
                   </PieChart>
                 </ResponsiveContainer>
               </div>
             )}
 
-            {/* Daily spending */}
-            <div className="auth-card">
-              <h2 className="text-sm font-semibold mb-4">Daily Spending This Month</h2>
-              <ResponsiveContainer width="100%" height={200}>
-                <LineChart data={analytics.dailySpending}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                  <XAxis dataKey="day" tick={{ fontSize: 10 }} />
-                  <YAxis tickFormatter={formatINR} tick={{ fontSize: 10 }} />
-                  <Tooltip formatter={(v) => formatFullINR(v)} labelFormatter={(d) => `Day ${d}`} />
-                  <Line type="monotone" dataKey="total" stroke="#3b82f6" strokeWidth={2} dot={false} name="Spent" />
-                </LineChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
-
-          {/* Category list with amounts */}
-          {analytics.categoryBreakdown.length > 0 && (
-            <div className="auth-card">
-              <h2 className="text-sm font-semibold mb-4">Category Breakdown</h2>
-              <div className="space-y-3">
-                {analytics.categoryBreakdown.map((cat) => {
-                  const pct = analytics.thisTotal > 0
-                    ? ((cat.total / analytics.thisTotal) * 100).toFixed(1) : 0;
-                  return (
-                    <div key={cat.name}>
-                      <div className="flex justify-between text-sm mb-1">
-                        <span className="font-medium">{cat.icon} {cat.name}</span>
-                        <span className="text-muted-foreground">{formatFullINR(cat.total)} · {pct}%</span>
+            {analytics.categoryBreakdown.length > 0 && (
+              <div className="auth-card">
+                <h2 className="text-sm font-semibold mb-4">Category Breakdown</h2>
+                <div className="space-y-3">
+                  {analytics.categoryBreakdown.map((cat) => {
+                    const pct = analytics.thisTotal > 0
+                      ? ((cat.total / analytics.thisTotal) * 100).toFixed(1) : 0;
+                    return (
+                      <div key={cat.name}>
+                        <div className="flex justify-between text-sm mb-1">
+                          <span className="font-medium">{cat.icon} {cat.name}</span>
+                          <span className="text-muted-foreground">{formatFullINR(cat.total)} · {pct}%</span>
+                        </div>
+                        <div className="w-full h-1.5 bg-secondary rounded-full">
+                          <div
+                            className="h-full rounded-full transition-all"
+                            style={{ width: `${pct}%`, backgroundColor: cat.color }}
+                          />
+                        </div>
                       </div>
-                      <div className="w-full h-1.5 bg-secondary rounded-full">
-                        <div
-                          className="h-full rounded-full transition-all"
-                          style={{ width: `${pct}%`, backgroundColor: cat.color }}
-                        />
-                      </div>
-                    </div>
-                  );
-                })}
+                    );
+                  })}
+                </div>
               </div>
-            </div>
-          )}
+            )}
+          </div>
         </div>
       )}
 
@@ -350,7 +428,6 @@ export default function ExpensePage() {
               onChange={(e) => setSelectedMonth(e.target.value)}
             />
           </div>
-
           <div className="auth-card">
             {expenses.length === 0 ? (
               <p className="text-sm text-muted-foreground text-center py-8">No expenses for this month.</p>
@@ -386,9 +463,9 @@ export default function ExpensePage() {
                         <td className="py-2.5 pr-4 text-muted-foreground text-xs">{exp.paymentMode}</td>
                         <td className="py-2.5 pr-4 text-muted-foreground max-w-[140px] truncate">{exp.note || "—"}</td>
                         <td className="py-2.5 pr-4 text-xs">
-                          {exp.isRecurring ? (
-                            <span className="px-2 py-0.5 rounded-full bg-blue-50 text-blue-600 font-medium">Recurring</span>
-                          ) : "—"}
+                          {exp.isRecurring
+                            ? <span className="px-2 py-0.5 rounded-full bg-blue-50 text-blue-600 font-medium">Recurring</span>
+                            : "—"}
                         </td>
                         <td className="py-2.5">
                           <button onClick={() => handleDeleteExpense(exp._id)} className="text-xs text-red-400 hover:text-red-600 transition-colors">
@@ -465,9 +542,7 @@ export default function ExpensePage() {
                   </div>
                 </div>
                 {!cat.isDefault && (
-                  <button onClick={() => handleDeleteCategory(cat._id)} className="text-xs text-red-400 hover:text-red-600 transition-colors">
-                    ×
-                  </button>
+                  <button onClick={() => handleDeleteCategory(cat._id)} className="text-xs text-red-400 hover:text-red-600 transition-colors">×</button>
                 )}
               </div>
             ))}
