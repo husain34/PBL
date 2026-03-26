@@ -21,6 +21,8 @@ const expenseSchema = new mongoose.Schema(
       default: "UPI",
     },
     isRecurring: { type: Boolean, default: false },
+    // 0 = indefinite, >0 = specific number of months remaining
+    recurringMonthsLeft: { type: Number, default: 0 },
   },
   { timestamps: true }
 );

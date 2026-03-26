@@ -18,42 +18,22 @@ function authMiddleware(req, res, next) {
   }
 }
 
-// POST /api/income
+// POST /api/income — add new income (non-salary only)
+// Blocks future-dated entries and salary source
 router.post("/", authMiddleware, async (req, res) => {
   const { amount, source, frequency, date, note } = req.body;
   if (!amount || !source || !frequency || !date)
     return res.status(400).json({ message: "Missing required fields" });
+  if (source === "Salary")
+    return res.status(400).json({ message: "Use the salary endpoint to manage salary" });
+
+  const entryDate = new Date(date);
+  const today = new Date();
+  today.setHours(23, 59, 59, 999);
+  if (entryDate > today)
+    return res.status(400).json({ message: "Cannot log income for a future date" });
+
   try {
-    const entryDate = new Date(date);
-    const monthStart = new Date(entryDate.getFullYear(), entryDate.getMonth(), 1);
-    const monthEnd = new Date(entryDate.getFullYear(), entryDate.getMonth() + 1, 0, 23, 59, 59);
-
-    // If source is Salary, replace existing salary entry for that month
-    if (source === "Salary") {
-      const existing = await Income.findOne({
-        userId: req.userId,
-        source: "Salary",
-        date: { $gte: monthStart, $lte: monthEnd },
-      });
-
-      if (existing) {
-        const diff = Number(amount) - existing.amount;
-        existing.amount = Number(amount);
-        existing.date = entryDate;
-        existing.note = note || "";
-        existing.frequency = frequency;
-        await existing.save();
-
-        // Adjust savings pot by the difference
-        await User.findByIdAndUpdate(req.userId, {
-          $inc: { savingsPot: diff },
-        });
-
-        return res.status(200).json(existing);
-      }
-    }
-
-    // For all other sources (or new salary with no existing entry), create normally
     const entry = await Income.create({
       userId: req.userId,
       amount: Number(amount),
@@ -62,12 +42,114 @@ router.post("/", authMiddleware, async (req, res) => {
       date: entryDate,
       note: note || "",
     });
+    await User.findByIdAndUpdate(req.userId, { $inc: { totalBalance: Number(amount) } });
+    res.status(201).json(entry);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
 
-    await User.findByIdAndUpdate(req.userId, {
-      $inc: { savingsPot: Number(amount) },
+// PUT /api/income/salary — create or update salary for a specific month
+router.put("/salary", authMiddleware, async (req, res) => {
+  const { amount, note, month } = req.body;
+  if (!amount || Number(amount) <= 0)
+    return res.status(400).json({ message: "Valid amount required" });
+
+  try {
+    const now = new Date();
+    let monthStart, monthEnd;
+    
+    if (month) {
+      const [year, monthNum] = month.split("-");
+      monthStart = new Date(Number(year), Number(monthNum) - 1, 1);
+      monthEnd = new Date(Number(year), Number(monthNum), 0, 23, 59, 59);
+    } else {
+      monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+      monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
+    }
+
+    const existing = await Income.findOne({
+      userId: req.userId,
+      source: "Salary",
+      date: { $gte: monthStart, $lte: monthEnd },
     });
 
-    res.status(201).json(entry);
+    const user = await User.findById(req.userId);
+    if (!user) return res.status(404).json({ message: "User not found" });
+
+    if (existing) {
+      const diff = Number(amount) - existing.amount;
+      existing.amount = Number(amount);
+      existing.note = note || existing.note;
+      await existing.save();
+      user.totalBalance = Math.max(0, (user.totalBalance || 0) + diff);
+      await user.save();
+      return res.json({ entry: existing, totalBalance: user.totalBalance, updated: true });
+    }
+
+    const [year, monthNum] = (month || `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`).split("-");
+    const entry = await Income.create({
+      userId: req.userId,
+      amount: Number(amount),
+      source: "Salary",
+      frequency: "Monthly",
+      date: new Date(Number(year), Number(monthNum) - 1, 1),
+      note: note || "",
+    });
+    user.totalBalance = (user.totalBalance || 0) + Number(amount);
+    await user.save();
+    res.status(201).json({ entry, totalBalance: user.totalBalance, updated: false });
+  } catch (err) {
+    console.error("Salary update error:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/income/salary — get salary entry for a specific month
+router.get("/salary", authMiddleware, async (req, res) => {
+  try {
+    const now = new Date();
+    const { month } = req.query;
+    let monthStart, monthEnd;
+    
+    if (month) {
+      const [year, monthNum] = month.split("-");
+      monthStart = new Date(Number(year), Number(monthNum) - 1, 1);
+      monthEnd = new Date(Number(year), Number(monthNum), 0, 23, 59, 59);
+    } else {
+      monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+      monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
+    }
+    
+    const entry = await Income.findOne({
+      userId: req.userId,
+      source: "Salary",
+      date: { $gte: monthStart, $lte: monthEnd },
+    });
+    res.json({ entry: entry || null });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// PUT /api/income/:id — edit a non-salary income entry
+router.put("/:id", authMiddleware, async (req, res) => {
+  const { amount, source, frequency, note } = req.body;
+  if (source === "Salary")
+    return res.status(400).json({ message: "Use the salary endpoint to manage salary" });
+  try {
+    const entry = await Income.findOne({ _id: req.params.id, userId: req.userId });
+    if (!entry) return res.status(404).json({ message: "Entry not found" });
+
+    const diff = Number(amount) - entry.amount;
+    entry.amount = Number(amount) || entry.amount;
+    entry.source = source || entry.source;
+    entry.frequency = frequency || entry.frequency;
+    entry.note = note ?? entry.note;
+    await entry.save();
+
+    await User.findByIdAndUpdate(req.userId, { $inc: { totalBalance: diff } });
+    res.json(entry);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -96,22 +178,11 @@ router.get("/summary", authMiddleware, async (req, res) => {
     });
     const thisMonthTotal = thisMonthEntries.reduce((s, e) => s + e.amount, 0);
 
-    // Projected annual: only use recurring/monthly entries, exclude one-time
-    const recurringEntries = thisMonthEntries.filter((e) => e.frequency !== "One-time");
-    const recurringMonthlyTotal = recurringEntries.reduce((s, e) => {
-      if (e.frequency === "Weekly") return s + e.amount * 4;
-      return s + e.amount; // Monthly
-    }, 0);
-    const projectedAnnual = recurringMonthlyTotal * 12;
-
     const sixMonthsAgo = new Date();
     sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 5);
     sixMonthsAgo.setDate(1);
 
-    const allEntries = await Income.find({
-      userId: req.userId,
-      date: { $gte: sixMonthsAgo },
-    });
+    const allEntries = await Income.find({ userId: req.userId, date: { $gte: sixMonthsAgo } });
 
     const monthMap = {};
     for (let i = 5; i >= 0; i--) {
@@ -133,20 +204,34 @@ router.get("/summary", authMiddleware, async (req, res) => {
       sourceMap[e.source] = (sourceMap[e.source] || 0) + e.amount;
     });
     const sourceBreakdown = Object.entries(sourceMap).map(([source, total]) => ({ source, total }));
-    const distinctSources = [...new Set(allUserEntries.map((e) => e.source))].length;
 
-    const user = await User.findById(req.userId).select("savingsPot profileAnswers");
+    // 6-month forecast: recurring/salary entries projected forward
+    const forecast = [];
+    const salaryEntry = thisMonthEntries.find((e) => e.source === "Salary");
+    const recurringEntries = await Income.find({
+      userId: req.userId,
+      frequency: "Monthly",
+      date: { $gte: startOfMonth, $lte: endOfMonth },
+    });
+    for (let i = 1; i <= 6; i++) {
+      const d = new Date(now.getFullYear(), now.getMonth() + i, 1);
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+      const projected = recurringEntries.reduce((s, e) => s + e.amount, 0);
+      forecast.push({ month: key, projected });
+    }
+
+    const user = await User.findById(req.userId).select("totalBalance profileAnswers");
     const profileIncome = user?.profileAnswers?.monthlyIncome || null;
-    const savingsPot = user?.savingsPot || 0;
+    const totalBalance = user?.totalBalance || 0;
 
     res.json({
       thisMonthTotal,
-      projectedAnnual,
-      distinctSources,
       monthlyChart,
       sourceBreakdown,
       profileIncome,
-      savingsPot,
+      totalBalance,
+      forecast,
+      currentSalary: salaryEntry ? salaryEntry.amount : null,
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -156,16 +241,11 @@ router.get("/summary", authMiddleware, async (req, res) => {
 // DELETE /api/income/:id
 router.delete("/:id", authMiddleware, async (req, res) => {
   try {
-    const entry = await Income.findOneAndDelete({
-      _id: req.params.id,
-      userId: req.userId,
-    });
+    const entry = await Income.findOneAndDelete({ _id: req.params.id, userId: req.userId });
     if (!entry) return res.status(404).json({ message: "Entry not found" });
-
     const user = await User.findById(req.userId);
-    user.savingsPot = Math.max(0, (user.savingsPot || 0) - entry.amount);
+    user.totalBalance = Math.max(0, (user.totalBalance || 0) - entry.amount);
     await user.save();
-
     res.json({ message: "Deleted" });
   } catch (err) {
     res.status(500).json({ error: err.message });

@@ -7,28 +7,20 @@ const incomeSchema = new mongoose.Schema(
       ref: "User",
       required: true,
     },
-    amount: {
-      type: Number,
-      required: true,
-    },
+    amount: { type: Number, required: true },
     source: {
       type: String,
       enum: ["Salary", "Freelance", "Business", "Rental", "Other"],
-      required: true,
+      required: function () { return !this.isSalary; },
     },
+    isSalary: { type: Boolean, default: false },
     frequency: {
       type: String,
       enum: ["One-time", "Monthly", "Weekly"],
       required: true,
     },
-    date: {
-      type: Date,
-      required: true,
-    },
-    note: {
-      type: String,
-      default: "",
-    },
+    date: { type: Date, required: true },
+    note: { type: String, default: "" },
   },
   { timestamps: true }
 );
