@@ -7,6 +7,7 @@ import Questionnaire from "./pages/Questionnaire";
 import IncomePage from "./pages/IncomePage";
 import ExpensePage from "./pages/ExpensePage";
 import GoalsPage from "./pages/GoalsPage";
+import PortfolioPage from "./pages/PortfolioPage";
 import Navbar from "./components/Navbar";
 
 function App() {
@@ -21,6 +22,7 @@ function App() {
         <Route path="/income" element={<IncomePage />} />
         <Route path="/expenses" element={<ExpensePage />} />
         <Route path="/goals" element={<GoalsPage />} />
+        <Route path="/portfolio" element={<PortfolioPage />} />
       </Routes>
     </BrowserRouter>
   );

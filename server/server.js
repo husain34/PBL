@@ -9,9 +9,11 @@ const incomeRoutes = require("./routes/incomeRoutes");
 const expenseRoutes = require("./routes/expenseRoutes");
 const categoryRoutes = require("./routes/categoryRoutes");
 const goalRoutes = require("./routes/goalRoutes");
+const portfolioRoutes = require("./routes/portfolioRoutes");
 
-// Ensure GoalAllocation model is registered
+// Ensure models are registered
 require("./models/GoalAllocation");
+require("./models/PortfolioHolding");
 
 const app = express();
 
@@ -29,6 +31,7 @@ app.use("/api/income", incomeRoutes);
 app.use("/api/expenses", expenseRoutes);
 app.use("/api/categories", categoryRoutes);
 app.use("/api/goals", goalRoutes);
+app.use("/api/portfolio", portfolioRoutes);
 
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
