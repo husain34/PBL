@@ -10,14 +10,14 @@ const portfolioHoldingSchema = new mongoose.Schema(
     symbol: { type: String, required: true },
     companyName: { type: String, default: "" },
     quantity: { type: Number, required: true },
-    avgPrice: { type: Number, required: true },
+    priceBoughtAt: { type: Number, required: true },
     purchaseDate: { type: Date, required: true },
     category: {
       type: String,
-      enum: ["Large Cap", "Mid Cap", "Small Cap", "Debt", "Other"],
+      enum: ["Large Cap", "Mid Cap", "Small Cap", "Unclassified"],
       required: true,
     },
-    // Cached price data
+
     lastPrice: { type: Number, default: 0 },
     lastFetched: { type: Date, default: null },
   },

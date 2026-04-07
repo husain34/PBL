@@ -4,6 +4,7 @@ const PortfolioHolding = require("../models/PortfolioHolding");
 const User = require("../models/User");
 const YahooFinance = require("yahoo-finance2").default;
 const yahooFinance = new YahooFinance();
+const { getStockCategory: getStockCategoryFromRanking, getCompanyName } = require("../utils/marketCapRanking");
 
 const router = express.Router();
 
@@ -13,30 +14,62 @@ async function getVolatility(symbol) {
     const now = new Date();
     const oneYearAgo = new Date(now.getFullYear() - 1, now.getMonth(), now.getDate());
     
-    const queryOptions = { period1: oneYearAgo, interval: "1wk" };
-    const history = await yahooFinance.historical(symbol, queryOptions);
+    const queryOptions = { period1: oneYearAgo, period2: now, interval: "1wk" };
     
-    if (!history || history.length < 5) return 0;
-
-    const returns = [];
-    for (let i = 1; i < history.length; i++) {
-        if (history[i].close && history[i-1].close) {
-            returns.push((history[i].close - history[i-1].close) / history[i-1].close);
+    try {
+      const history = await yahooFinance.historical(symbol, queryOptions);
+      
+      if (!history || history.length < 5) {
+        console.warn(`Not enough historical data for ${symbol}, trying daily data...`);
+        // Fallback to using 3 months of daily data
+        const threeMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 3, now.getDate());
+        const dailyOptions = { period1: threeMonthsAgo, period2: now, interval: "1d" };
+        const dailyHistory = await yahooFinance.historical(symbol, dailyOptions);
+        
+        if (!dailyHistory || dailyHistory.length < 10) {
+          console.warn(`Insufficient data for ${symbol}, using estimated volatility`);
+          return 0.15; // Default volatility estimate for stocks (15%)
         }
+        
+        return calculateVolatilityFromHistory(dailyHistory, symbol);
+      }
+      
+      return calculateVolatilityFromHistory(history, symbol);
+    } catch (fetchError) {
+      console.warn(`Historical fetch failed for ${symbol}:`, fetchError.message);
+      // Return default volatility estimate
+      return 0.15;
     }
-
-    if (returns.length === 0) return 0;
-
-    const mean = returns.reduce((s, r) => s + r, 0) / returns.length;
-    const variance = returns.reduce((s, r) => s + Math.pow(r - mean, 2), 0) / returns.length;
-    const stdDev = Math.sqrt(variance);
-    
-    // Annualized volatility
-    return stdDev * Math.sqrt(52);
   } catch (e) {
     console.error(`Volatility calc failed for ${symbol}:`, e.message);
-    return 0;
+    return 0.15; // Default to 15% instead of 0
   }
+}
+
+// Helper to calculate volatility from historical data
+function calculateVolatilityFromHistory(history, symbol) {
+  const returns = [];
+  for (let i = 1; i < history.length; i++) {
+    if (history[i].close && history[i-1].close) {
+      const dailyReturn = (history[i].close - history[i-1].close) / history[i-1].close;
+      returns.push(dailyReturn);
+    }
+  }
+
+  if (returns.length === 0) {
+    console.warn(`No valid returns for ${symbol}`);
+    return 0.15;
+  }
+
+  const mean = returns.reduce((s, r) => s + r, 0) / returns.length;
+  const variance = returns.reduce((s, r) => s + Math.pow(r - mean, 2), 0) / returns.length;
+  const stdDev = Math.sqrt(variance);
+  
+  // Annualized volatility (252 trading days for daily data, 52 weeks for weekly)
+  const annualizedVolatility = stdDev * Math.sqrt(history.length > 100 ? 252 : 52);
+  
+  console.log(`Calculated volatility for ${symbol}: ${(annualizedVolatility * 100).toFixed(2)}%`);
+  return annualizedVolatility;
 }
 
 function authMiddleware(req, res, next) {
@@ -52,25 +85,68 @@ function authMiddleware(req, res, next) {
   }
 }
 
+// Helper to determine stock category based on SEBI official classification
+// Uses hardcoded Nifty100, Nifty Midcap150, Nifty Smallcap500 lists
+function getStockCategory(symbol) {
+  const category = getStockCategoryFromRanking(symbol);
+  const company = getCompanyName(symbol);
+  if (company) {
+    console.log(`Stock ${symbol}: ${company}, Category: ${category}`);
+  } else {
+    console.warn(`Stock ${symbol}: Not found in database, Category: ${category}`);
+  }
+  return category;
+}
+
+// GET /api/portfolio/stock-category/:symbol — Fetch stock category based on market cap ranking
+router.get("/stock-category/:symbol", authMiddleware, async (req, res) => {
+  try {
+    const { symbol } = req.params;
+    const category = getStockCategory(symbol);
+    
+    // Also fetch company name
+    const quote = await yahooFinance.quote(symbol);
+    const companyName = quote?.longName || quote?.shortName || symbol;
+    
+    res.json({ category, companyName, symbol: symbol.toUpperCase() });
+  } catch (err) {
+    console.error("Stock category fetch error:", err);
+    res.status(500).json({ error: "Failed to fetch stock category" });
+  }
+});
+
+
 // POST /api/portfolio — Add a new holding
 router.post("/", authMiddleware, async (req, res) => {
-  const { symbol, quantity, avgPrice, purchaseDate, category } = req.body;
-  if (!symbol || !quantity || !avgPrice || !purchaseDate || !category)
+  const { symbol, quantity, priceBoughtAt, purchaseDate, category } = req.body;
+  if (!symbol || !quantity || !priceBoughtAt || !purchaseDate)
     return res.status(400).json({ message: "Missing required fields" });
 
   try {
-    // Initial fetch to validate symbol and get company name
+    // Validate stock symbol and fetch from Yahoo Finance
     const quote = await yahooFinance.quote(symbol);
     if (!quote) return res.status(404).json({ message: "Stock symbol not found" });
+
+    // If category not provided, auto-fetch it based on market cap ranking
+    let finalCategory = category;
+    if (!finalCategory) {
+      finalCategory = getStockCategory(symbol);
+    }
+
+    // Validate category (only equity categories allowed)
+    const validCategories = ["Large Cap", "Mid Cap", "Small Cap", "Unclassified"];
+    if (finalCategory && !validCategories.includes(finalCategory)) {
+      return res.status(400).json({ message: "Invalid category. Only Large Cap, Mid Cap, Small Cap, and Unclassified are supported." });
+    }
 
     const holding = await PortfolioHolding.create({
       userId: req.userId,
       symbol: symbol.toUpperCase(),
       companyName: quote.longName || quote.shortName || symbol,
       quantity: Number(quantity),
-      avgPrice: Number(avgPrice),
+      priceBoughtAt: Number(priceBoughtAt),
       purchaseDate,
-      category,
+      category: finalCategory,
       lastPrice: quote.regularMarketPrice,
       lastFetched: new Date(),
     });
@@ -78,7 +154,7 @@ router.post("/", authMiddleware, async (req, res) => {
     res.status(201).json(holding);
   } catch (err) {
     console.error("Add holding error:", err);
-    res.status(500).json({ error: "Failed to fetch stock data or add holding" });
+    res.status(500).json({ error: "Failed to fetch stock data. Please check the symbol and try again." });
   }
 });
 
@@ -119,13 +195,13 @@ router.get("/", authMiddleware, async (req, res) => {
 
 // PUT /api/portfolio/:id — Edit a holding
 router.put("/:id", authMiddleware, async (req, res) => {
-  const { quantity, avgPrice, purchaseDate, category } = req.body;
+  const { quantity, priceBoughtAt, purchaseDate, category } = req.body;
   try {
     const holding = await PortfolioHolding.findOne({ _id: req.params.id, userId: req.userId });
     if (!holding) return res.status(404).json({ message: "Holding not found" });
 
     if (quantity !== undefined) holding.quantity = Number(quantity);
-    if (avgPrice !== undefined) holding.avgPrice = Number(avgPrice);
+    if (priceBoughtAt !== undefined) holding.priceBoughtAt = Number(priceBoughtAt);
     if (purchaseDate !== undefined) holding.purchaseDate = purchaseDate;
     if (category !== undefined) holding.category = category;
 
@@ -162,8 +238,8 @@ router.get("/summary", authMiddleware, async (req, res) => {
     const stockReturns = [];
 
     updated.forEach(h => {
-      const invested = h.quantity * h.avgPrice;
-      const current = h.quantity * (h.lastPrice || h.avgPrice);
+      const invested = h.quantity * h.priceBoughtAt;
+      const current = h.quantity * (h.lastPrice || h.priceBoughtAt);
       const pnl = current - invested;
       const pnlPct = invested > 0 ? (pnl / invested) * 100 : 0;
 
@@ -183,6 +259,13 @@ router.get("/summary", authMiddleware, async (req, res) => {
       });
     });
 
+
+
+    const categoryBreakdown = Object.entries(categoryMap).map(([name, total]) => ({
+      name,
+      total: Number(total.toFixed(2))
+    }));
+
     // Fetch volatilities for each unique symbol
     const symbols = [...new Set(updated.map(h => h.symbol))];
     const volMap = {};
@@ -196,11 +279,6 @@ router.get("/summary", authMiddleware, async (req, res) => {
         sr.volatility = Number((volMap[sr.symbol] * 100).toFixed(2));
         weightedVolSum += (volMap[sr.symbol] * (sr.value / currentValue));
     });
-
-    const categoryBreakdown = Object.entries(categoryMap).map(([name, total]) => ({
-      name,
-      total: Number(total.toFixed(2))
-    }));
 
     // Sort stock returns by best performing
     stockReturns.sort((a, b) => b.returnPct - a.returnPct);
@@ -227,22 +305,22 @@ router.get("/suggestions", authMiddleware, async (req, res) => {
     const investorType = user?.investorType || "Moderate"; // Default to Moderate
 
     const holdings = await PortfolioHolding.find({ userId: req.userId });
-    const currentValue = holdings.reduce((sum, h) => sum + (h.quantity * (h.lastPrice || h.avgPrice)), 0);
+    const currentValue = holdings.reduce((sum, h) => sum + (h.quantity * (h.lastPrice || h.priceBoughtAt)), 0);
 
     const categoryMap = {};
     holdings.forEach(h => {
-      const val = h.quantity * (h.lastPrice || h.avgPrice);
+      const val = h.quantity * (h.lastPrice || h.priceBoughtAt);
       categoryMap[h.category] = (categoryMap[h.category] || 0) + val;
     });
 
     const TARGETS = {
-      Conservative: { "Large Cap": 40, "Mid Cap": 10, "Small Cap": 0, "Debt": 40, "Other": 10 },
-      Moderate: { "Large Cap": 50, "Mid Cap": 20, "Small Cap": 10, "Debt": 15, "Other": 5 },
-      Aggressive: { "Large Cap": 40, "Mid Cap": 30, "Small Cap": 25, "Debt": 0, "Other": 5 }
+      Conservative: { "Large Cap": 60, "Mid Cap": 30, "Small Cap": 10 },
+      Moderate: { "Large Cap": 50, "Mid Cap": 35, "Small Cap": 15 },
+      Aggressive: { "Large Cap": 40, "Mid Cap": 40, "Small Cap": 20 }
     };
 
     const target = TARGETS[investorType];
-    const categories = ["Large Cap", "Mid Cap", "Small Cap", "Debt", "Other"];
+    const categories = ["Large Cap", "Mid Cap", "Small Cap"];
     
     const analysis = categories.map(cat => {
       const currentVal = categoryMap[cat] || 0;

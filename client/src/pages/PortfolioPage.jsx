@@ -11,27 +11,21 @@ function formatFullINR(v) {
   return new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 2 }).format(v);
 }
 function formatINR(v) {
-  if (Math.abs(v) >= 10000000) return `₹${(v / 10000000).toFixed(2)}Cr`;
-  if (Math.abs(v) >= 100000) return `₹${(v / 100000).toFixed(2)}L`;
-  if (Math.abs(v) >= 1000) return `₹${(v / 1000).toFixed(2)}k`;
-  return `₹${v.toFixed(2)}`;
+  return new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 2 }).format(v);
 }
 
-const CATEGORIES = ["Large Cap", "Mid Cap", "Small Cap", "Debt", "Other"];
+const CATEGORIES = ["Large Cap", "Mid Cap", "Small Cap"];
 const CAT_COLORS = {
   "Large Cap": "#3b82f6", // blue
   "Mid Cap": "#8b5cf6",   // violet
-  "Small Cap": "#ec4899", // pink
-  "Debt": "#10b981",      // emerald
-  "Other": "#6b7280"      // gray
+  "Small Cap": "#ec4899"  // pink
 };
 
 const EMPTY_FORM = {
   symbol: "",
   quantity: "",
-  avgPrice: "",
-  purchaseDate: new Date().toISOString().split("T")[0],
-  category: "Large Cap"
+  priceBoughtAt: "",
+  purchaseDate: new Date().toISOString().split("T")[0]
 };
 
 export default function PortfolioPage() {
@@ -93,7 +87,7 @@ export default function PortfolioPage() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!form.symbol || !form.quantity || !form.avgPrice || !form.purchaseDate) {
+    if (!form.symbol || !form.quantity || !form.priceBoughtAt || !form.purchaseDate) {
       setError("Please fill all fields.");
       return;
     }
@@ -122,8 +116,8 @@ export default function PortfolioPage() {
     }
   };
 
-  const calculateTotalValue = () => holdings.reduce((sum, h) => sum + (h.quantity * (h.lastPrice || h.avgPrice)), 0);
-  const calculateTotalInvested = () => holdings.reduce((sum, h) => sum + (h.quantity * h.avgPrice), 0);
+  const calculateTotalValue = () => holdings.reduce((sum, h) => sum + (h.quantity * (h.lastPrice || h.priceBoughtAt)), 0);
+  const calculateTotalInvested = () => holdings.reduce((sum, h) => sum + (h.quantity * h.priceBoughtAt), 0);
   const totalValue = calculateTotalValue();
   const totalInvested = calculateTotalInvested();
   const totalPnL = totalValue - totalInvested;
@@ -155,12 +149,7 @@ export default function PortfolioPage() {
           value={`${totalReturnPct.toFixed(2)}%`} 
           color={totalReturnPct >= 0 ? "emerald" : "red"} 
         />
-        <SummaryCard 
-          label="Risk (Volatility)" 
-          value={summary?.portfolioVolatility ? `${summary.portfolioVolatility}%` : "--"} 
-          color={summary?.portfolioVolatility > 20 ? "red" : (summary?.portfolioVolatility > 10 ? "violet" : "emerald")} 
-          sub="Annualized"
-        />
+
       </div>
 
       {/* Tabs */}
@@ -203,24 +192,14 @@ export default function PortfolioPage() {
                     />
                   </div>
                   <div className="space-y-1">
-                    <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Avg Price (₹)</label>
+                    <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Price Bought At (₹)</label>
                     <input 
                       type="number" step="any"
                       className="w-full rounded-lg border border-border px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary"
-                      value={form.avgPrice}
-                      onChange={(e) => setForm({...form, avgPrice: e.target.value})}
+                      value={form.priceBoughtAt}
+                      onChange={(e) => setForm({...form, priceBoughtAt: e.target.value})}
                     />
                   </div>
-                </div>
-                <div className="space-y-1">
-                  <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Category</label>
-                  <select 
-                    className="w-full rounded-lg border border-border px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary"
-                    value={form.category}
-                    onChange={(e) => setForm({...form, category: e.target.value})}
-                  >
-                    {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
-                  </select>
                 </div>
                 <div className="space-y-1">
                   <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Purchase Date</label>
@@ -262,7 +241,7 @@ export default function PortfolioPage() {
                       <th className="pb-3 pr-3">Asset</th>
                       <th className="pb-3 pr-3">Category</th>
                       <th className="pb-3 pr-3 text-right">Quantity</th>
-                      <th className="pb-3 pr-3 text-right">Avg Price</th>
+                      <th className="pb-3 pr-3 text-right">Price Bought</th>
                       <th className="pb-3 pr-3 text-right">Cur Price</th>
                       <th className="pb-3 pr-3 text-right">P&L</th>
                       <th className="pb-3 text-right">Action</th>
@@ -271,7 +250,7 @@ export default function PortfolioPage() {
                   <tbody className="divide-y divide-border">
                     {holdings.map((h) => {
                       const curValue = h.quantity * (h.lastPrice || 0);
-                      const invested = h.quantity * h.avgPrice;
+                      const invested = h.quantity * h.priceBoughtAt;
                       const pnl = curValue - invested;
                       const pnlPct = invested > 0 ? (pnl / invested) * 100 : 0;
                       
@@ -288,12 +267,12 @@ export default function PortfolioPage() {
                               </span>
                           </td>
                           <td className="py-4 pr-3 text-right tabular-nums">{h.quantity}</td>
-                          <td className="py-4 pr-3 text-right tabular-nums">{formatINR(h.avgPrice)}</td>
+                          <td className="py-4 pr-3 text-right tabular-nums">{formatINR(h.priceBoughtAt)}</td>
                           <td className="py-4 pr-3 text-right tabular-nums">
-                            {h.lastPrice ? formatINR(h.lastPrice) : <span className="text-xs italic text-muted-foreground">Stale</span>}
+                            {h.lastPrice ? h.lastPrice.toFixed(2) : <span className="text-xs italic text-muted-foreground">Stale</span>}
                           </td>
                           <td className={`py-4 pr-3 text-right tabular-nums font-semibold ${pnl >= 0 ? "text-emerald-600" : "text-red-500"}`}>
-                            <div>{pnl >= 0 ? "+" : ""}{formatINR(pnl)}</div>
+                            <div>{pnl >= 0 ? "+" : ""}{pnl.toFixed(2)}</div>
                             <div className="text-[10px] opacity-80">{pnl >= 0 ? "+" : ""}{pnlPct.toFixed(2)}%</div>
                           </td>
                           <td className="py-4 text-right">
@@ -334,7 +313,6 @@ export default function PortfolioPage() {
                       innerRadius={60}
                       outerRadius={100}
                       paddingAngle={5}
-                      label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
                     >
                       {summary.categoryBreakdown.map((entry) => (
                         <Cell key={entry.name} fill={CAT_COLORS[entry.name] || "#ccc"} />
@@ -344,7 +322,7 @@ export default function PortfolioPage() {
                       formatter={(v) => formatFullINR(v)}
                       contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
                     />
-                    <Legend verticalAlign="bottom" height={36}/>
+                    <Legend verticalAlign="bottom" height={36} wrapperStyle={{ paddingTop: '20px' }}/>
                   </PieChart>
                 </ResponsiveContainer>
               </div>
@@ -375,6 +353,9 @@ export default function PortfolioPage() {
                       dataKey="returnPct" 
                       radius={[0, 4, 4, 0]}
                       barSize={20}
+                      isAnimationActive={false}
+                      cursor="default"
+                      activeBar={false}
                     >
                       {summary.stockReturns.map((entry, index) => (
                         <Cell key={`cell-${index}`} fill={entry.returnPct >= 0 ? "#10b981" : "#ef4444"} />
@@ -396,24 +377,16 @@ export default function PortfolioPage() {
                     <th className="pb-2">Stock</th>
                     <th className="pb-2">Return %</th>
                     <th className="pb-2">P&L</th>
-                    <th className="pb-2">Volatility</th>
-                    <th className="pb-2">Risk Level</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border">
-                  {summary.stockReturns.map((sr) => {
-                    const riskLevel = sr.volatility > 25 ? "High" : (sr.volatility > 15 ? "Medium" : "Low");
-                    const riskColor = riskLevel === "High" ? "text-red-500" : (riskLevel === "Medium" ? "text-amber-500" : "text-emerald-500");
-                    return (
+                  {summary.stockReturns.map((sr) => (
                       <tr key={sr.symbol} className="hover:bg-secondary/20">
                         <td className="py-2.5 font-bold">{sr.symbol}</td>
                         <td className={`py-2.5 ${sr.returnPct >= 0 ? "text-emerald-600" : "text-red-500"}`}>{sr.returnPct}%</td>
                         <td className="py-2.5">{formatINR(sr.pnl)}</td>
-                        <td className="py-2.5">{sr.volatility}%</td>
-                        <td className={`py-2.5 font-semibold ${riskColor}`}>{riskLevel}</td>
                       </tr>
-                    );
-                  })}
+                    ))}
                 </tbody>
               </table>
             </div>
@@ -556,12 +529,7 @@ export default function PortfolioPage() {
                        portfolioValue={`${summary.totalReturnPct}%`}
                        isHigherBetter={true}
                     />
-                    <ComparisonMetric 
-                       label="Volatility (Risk) %" 
-                       stockValue={`${summary.stockReturns.find(s => s.symbol === selectedStockSymbol).volatility}%`}
-                       portfolioValue={`${summary.portfolioVolatility}%`}
-                       isHigherBetter={false}
-                    />
+
                     <ComparisonMetric 
                        label="Asset Weight %" 
                        stockValue={`${((summary.stockReturns.find(s => s.symbol === selectedStockSymbol).value / summary.currentValue) * 100).toFixed(2)}%`}
@@ -582,22 +550,9 @@ export default function PortfolioPage() {
                        const stock = summary.stockReturns.find(s => s.symbol === selectedStockSymbol);
                        if (!stock) return "";
                        const isOutperforming = stock.returnPct > summary.totalReturnPct;
-                       return `The holding ${stock.symbol} is currently ${isOutperforming ? "outperforming" : "underperforming"} your overall portfolio return by ${Math.abs(stock.returnPct - summary.totalReturnPct).toFixed(2)}%. Its volatility is ${stock.volatility}%, which indicates it is ${stock.volatility > summary.portfolioVolatility ? "riskier than" : "more stable than"} your average portfolio risk.`;
+                       return `The holding ${stock.symbol} is currently ${isOutperforming ? "outperforming" : "underperforming"} your overall portfolio return by ${Math.abs(stock.returnPct - summary.totalReturnPct).toFixed(2)}%.`;
                     })()}
                  </p>
-              </div>
-              <div className="auth-card">
-                 <h3 className="text-sm font-semibold mb-4">Risk Contribution</h3>
-                 <div className="h-2 w-full bg-secondary rounded-full overflow-hidden mt-4">
-                    <div 
-                       className="h-full bg-primary transition-all duration-1000" 
-                       style={{ 
-                          width: `${summary.stockReturns.find(s => s.symbol === selectedStockSymbol) ? 
-                            (summary.stockReturns.find(s => s.symbol === selectedStockSymbol).volatility / Math.max(...summary.stockReturns.map(s => s.volatility)) * 100) : 0}%` 
-                       }}
-                    ></div>
-                 </div>
-                 <p className="text-[10px] text-muted-foreground mt-2 uppercase text-right">Relative Risk vs Max Holding</p>
               </div>
            </div>
         </div>
