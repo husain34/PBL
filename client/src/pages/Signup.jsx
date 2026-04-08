@@ -1,7 +1,12 @@
-import React from "react";
-import { useState } from "react";
+import React, { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import axios from "axios";
+
+const featurePoints = [
+  "Personalized portfolio profiling",
+  "Smart income and expense tracking",
+  "Clear goal-based planning",
+];
 
 const Signup = () => {
   const navigate = useNavigate();
@@ -16,129 +21,100 @@ const Signup = () => {
     e.preventDefault();
 
     try {
-      await axios.post(
-        "http://localhost:5000/api/auth/signup",
-        form
-      );
-
+      await axios.post("http://localhost:5000/api/auth/signup", form);
       alert("Signup successful!");
-
       navigate("/login");
     } catch (error) {
-      alert(
-        error.response?.data?.message ||
-          "Signup failed"
-      );
+      alert(error.response?.data?.message || "Signup failed");
     }
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background px-4">
-      <div className="auth-card">
-        <div className="mb-8 text-center">
-          <h1 className="text-2xl font-bold">
-            Create an account
-          </h1>
-          <p className="mt-1 text-sm">
-            Sign up to get started
-          </p>
+    <div className="auth-shell">
+      <div className="auth-backdrop auth-backdrop-signup" />
+
+      <section className="auth-showcase">
+        <p className="dashboard-eyebrow">OPTIFOLIO</p>
+        <h1 className="auth-showcase-title">Build a calmer, clearer financial system from day one.</h1>
+        <p className="auth-showcase-copy">
+          Create your account to unlock a polished dashboard for planning, tracking, and optimizing your money decisions.
+        </p>
+
+        <div className="auth-showcase-card">
+          <p className="auth-showcase-label">What you get</p>
+          <div className="auth-feature-list">
+            {featurePoints.map((item) => (
+              <div key={item} className="auth-feature-item">
+                <span className="auth-feature-dot" />
+                <p>{item}</p>
+              </div>
+            ))}
+          </div>
         </div>
+      </section>
 
-        <form
-          onSubmit={handleSubmit}
-          className="space-y-4"
-        >
-          <div className="space-y-1">
-            <label className="text-sm font-medium">
-              Full Name
-            </label>
-            <input
-              className="w-full rounded-lg border px-3 py-2 text-sm"
-              placeholder="John Doe"
-              value={form.name}
-              onChange={(e) =>
-                setForm({
-                  ...form,
-                  name: e.target.value,
-                })
-              }
-              required
-            />
+      <section className="auth-form-panel">
+        <div className="auth-form-card">
+          <div className="auth-form-header">
+            <p className="dashboard-eyebrow">Create Account</p>
+            <h2>Join OPTIFOLIO</h2>
+            <p>Set up your account and start building your personalized finance workspace.</p>
           </div>
 
-          <div className="space-y-1">
-            <label className="text-sm font-medium">
-              Email
-            </label>
-            <input
-              type="email"
-              className="w-full rounded-lg border px-3 py-2 text-sm"
-              placeholder="you@example.com"
-              value={form.email}
-              onChange={(e) =>
-                setForm({
-                  ...form,
-                  email: e.target.value,
-                })
-              }
-              required
-            />
-          </div>
-
-          <div className="space-y-1">
-            <label className="text-sm font-medium">
-              Password
-            </label>
-            <div className="relative">
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="space-y-1">
+              <label className="dashboard-field-label">Full Name</label>
               <input
-                type={
-                  showPassword
-                    ? "text"
-                    : "password"
-                }
-                className="w-full rounded-lg border px-3 py-2 text-sm"
-                placeholder="••••••••"
-                value={form.password}
-                onChange={(e) =>
-                  setForm({
-                    ...form,
-                    password: e.target.value,
-                  })
-                }
+                className="dashboard-input"
+                placeholder="John Doe"
+                value={form.name}
+                onChange={(e) => setForm({ ...form, name: e.target.value })}
                 required
               />
-              <button
-                type="button"
-                onClick={() =>
-                  setShowPassword(!showPassword)
-                }
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-xs"
-              >
-                {showPassword
-                  ? "Hide"
-                  : "Show"}
-              </button>
             </div>
-          </div>
 
-          <button
-            type="submit"
-            className="w-full rounded-lg bg-blue-600 py-2.5 text-sm font-medium text-white"
-          >
-            Sign Up
-          </button>
-        </form>
+            <div className="space-y-1">
+              <label className="dashboard-field-label">Email</label>
+              <input
+                type="email"
+                className="dashboard-input"
+                placeholder="you@example.com"
+                value={form.email}
+                onChange={(e) => setForm({ ...form, email: e.target.value })}
+                required
+              />
+            </div>
 
-        <p className="mt-6 text-center text-sm">
-          Already have an account?{" "}
-          <Link
-            to="/login"
-            className="font-medium text-blue-600"
-          >
-            Log in
-          </Link>
-        </p>
-      </div>
+            <div className="space-y-1">
+              <label className="dashboard-field-label">Password</label>
+              <div className="auth-password-wrap">
+                <input
+                  type={showPassword ? "text" : "password"}
+                  className="dashboard-input"
+                  placeholder="Enter a secure password"
+                  value={form.password}
+                  onChange={(e) => setForm({ ...form, password: e.target.value })}
+                  required
+                />
+                <button type="button" onClick={() => setShowPassword(!showPassword)} className="auth-password-toggle">
+                  {showPassword ? "Hide" : "Show"}
+                </button>
+              </div>
+            </div>
+
+            <button type="submit" className="dashboard-primary-button w-full">
+              Create Account
+            </button>
+          </form>
+
+          <p className="auth-footer-text">
+            Already have an account?{" "}
+            <Link to="/login" className="auth-footer-link">
+              Log in
+            </Link>
+          </p>
+        </div>
+      </section>
     </div>
   );
 };

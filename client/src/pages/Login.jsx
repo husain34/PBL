@@ -1,10 +1,14 @@
-import React from "react";
-import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import React, { useState } from "react";
+import { Link } from "react-router-dom";
 import axios from "axios";
 
+const quickStats = [
+  { label: "Tracked", value: "24/7" },
+  { label: "Clarity", value: "1 dashboard" },
+  { label: "Guidance", value: "Personalized" },
+];
+
 const Login = () => {
-  const navigate = useNavigate();
   const [showPassword, setShowPassword] = useState(false);
   const [form, setForm] = useState({ email: "", password: "" });
 
@@ -14,15 +18,23 @@ const Login = () => {
       const res = await axios.post("http://localhost:5000/api/auth/login", form);
       localStorage.setItem("token", res.data.token);
 
-      // Check if user has already completed profile
       const profileRes = await axios.get("http://localhost:5000/api/profile", {
         headers: { Authorization: `Bearer ${res.data.token}` },
       });
 
+      localStorage.setItem(
+        "user",
+        JSON.stringify({
+          name: profileRes.data.name || res.data.user?.name,
+          email: profileRes.data.email || res.data.user?.email,
+          investorType: profileRes.data.investorType || "",
+        })
+      );
+
       if (profileRes.data.profileCompleted) {
-        navigate("/home");
+        window.location.replace("/home");
       } else {
-        navigate("/profile-setup");
+        window.location.replace("/profile-setup");
       }
     } catch (error) {
       alert(error.response?.data?.message || "Login failed");
@@ -30,68 +42,83 @@ const Login = () => {
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background px-4">
-      <div className="auth-card">
-        <div className="mb-8 text-center">
-          <h1 className="text-2xl font-bold text-foreground">Welcome back</h1>
-          <p className="mt-1 text-sm text-muted-foreground">Log in to your account</p>
-        </div>
+    <div className="auth-shell">
+      <div className="auth-backdrop auth-backdrop-login" />
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="space-y-1">
-            <label htmlFor="email" className="text-sm font-medium text-foreground">
-              Email
-            </label>
-            <input
-              id="email"
-              type="email"
-              className="w-full rounded-lg border px-3 py-2 text-sm"
-              placeholder="you@example.com"
-              value={form.email}
-              onChange={(e) => setForm({ ...form, email: e.target.value })}
-              required
-            />
+      <section className="auth-showcase">
+        <p className="dashboard-eyebrow">Welcome Back</p>
+        <h1 className="auth-showcase-title">Step back into your financial command center.</h1>
+        <p className="auth-showcase-copy">
+          Log in to review your dashboard, continue planning, and keep every money decision visible and organized.
+        </p>
+
+        <div className="auth-stats-grid">
+          {quickStats.map((stat) => (
+            <div key={stat.label} className="auth-stat-card">
+              <p>{stat.label}</p>
+              <h3>{stat.value}</h3>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section className="auth-form-panel">
+        <div className="auth-form-card">
+          <div className="auth-form-header">
+            <p className="dashboard-eyebrow">Sign In</p>
+            <h2>Log In to OPTIFOLIO</h2>
+            <p>Pick up where you left off and continue with your personalized experience.</p>
           </div>
 
-          <div className="space-y-1">
-            <label htmlFor="password" className="text-sm font-medium text-foreground">
-              Password
-            </label>
-            <div className="relative">
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="space-y-1">
+              <label htmlFor="email" className="dashboard-field-label">
+                Email
+              </label>
               <input
-                id="password"
-                type={showPassword ? "text" : "password"}
-                className="w-full rounded-lg border px-3 py-2 text-sm"
-                placeholder="••••••••"
-                value={form.password}
-                onChange={(e) => setForm({ ...form, password: e.target.value })}
+                id="email"
+                type="email"
+                className="dashboard-input"
+                placeholder="you@example.com"
+                value={form.email}
+                onChange={(e) => setForm({ ...form, email: e.target.value })}
                 required
               />
-              <button
-                type="button"
-                onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-xs"
-              >
-                {showPassword ? "Hide" : "Show"}
-              </button>
             </div>
-          </div>
 
-          <button
-            type="submit"
-            className="w-full rounded-lg bg-blue-600 py-2.5 text-sm font-medium text-white hover:bg-blue-700 transition-colors"
-          >
-            Log In
-          </button>
-        </form>
+            <div className="space-y-1">
+              <label htmlFor="password" className="dashboard-field-label">
+                Password
+              </label>
+              <div className="auth-password-wrap">
+                <input
+                  id="password"
+                  type={showPassword ? "text" : "password"}
+                  className="dashboard-input"
+                  placeholder="Enter your password"
+                  value={form.password}
+                  onChange={(e) => setForm({ ...form, password: e.target.value })}
+                  required
+                />
+                <button type="button" onClick={() => setShowPassword(!showPassword)} className="auth-password-toggle">
+                  {showPassword ? "Hide" : "Show"}
+                </button>
+              </div>
+            </div>
 
-        <p className="mt-6 text-center text-sm">
-          Don't have an account?{" "}
-          <Link to="/" className="font-medium text-blue-600">
-            Sign up
-          </Link>
-        </p>
-      </div>
+            <button type="submit" className="dashboard-primary-button w-full">
+              Log In
+            </button>
+          </form>
+
+          <p className="auth-footer-text">
+            Don&apos;t have an account?{" "}
+            <Link to="/" className="auth-footer-link">
+              Sign up
+            </Link>
+          </p>
+        </div>
+      </section>
     </div>
   );
 };

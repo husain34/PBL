@@ -1,96 +1,111 @@
 import React from "react";
 
+const overviewCards = [
+  {
+    label: "Portfolio Value",
+    title: "No live value",
+    note: "Connect real portfolio data to display this card.",
+    tone: "sky",
+  },
+  {
+    label: "Expected Return",
+    title: "Not available yet",
+    note: "This section should use actual optimization results only.",
+    tone: "lavender",
+  },
+  {
+    label: "Portfolio Risk",
+    title: "No computed risk",
+    note: "Risk metrics will appear when real analysis is connected.",
+    tone: "mint",
+  },
+];
+
+const quickPoints = [
+  "Risk-based portfolio construction",
+  "Efficient frontier visualization",
+  "Maximum Sharpe ratio support",
+  "Diversification analysis",
+];
+
 function Home() {
   return (
-    <div className="min-h-screen bg-background text-foreground px-6 py-12">
-      
-      {/* Hero Section */}
-      <section className="max-w-6xl mx-auto text-center mb-16">
-        <h1 className="text-5xl font-bold mb-6">
-          OPTIFOLIO 📊
-        </h1>
-        <p className="text-xl text-muted-foreground max-w-3xl mx-auto">
-          A Modern Portfolio Optimization System built on 
-          <span className="font-semibold text-primary"> Modern Portfolio Theory</span>. 
-          OPTIFOLIO empowers investors with risk-based allocation, 
-          efficient frontier visualization, and intelligent rebalancing strategies.
-        </p>
+    <div className="dashboard-shell">
+      <section className="dashboard-hero">
+        <div>
+          <p className="dashboard-eyebrow">Portfolio Overview</p>
+          <h1 className="dashboard-title">Portfolio Optimization Dashboard</h1>
+          <p className="dashboard-subtitle">
+            A clean dashboard layout for your project without showing any made-up numbers or sample financial records.
+          </p>
+        </div>
       </section>
 
-      {/* Features Grid */}
-      <section className="max-w-6xl mx-auto grid md:grid-cols-2 lg:grid-cols-3 gap-8">
-
-        {/* Feature 1 */}
-        <div className="auth-card">
-          <h2 className="text-xl font-semibold mb-3 text-primary">
-            1️⃣ Risk-Based Portfolio Construction
-          </h2>
-          <p className="text-muted-foreground">
-            Generate optimized asset allocations tailored to investor risk profiles 
-            — Low, Medium, and High — ensuring alignment with individual return expectations 
-            and risk tolerance.
-          </p>
-        </div>
-
-        {/* Feature 2 */}
-        <div className="auth-card">
-          <h2 className="text-xl font-semibold mb-3 text-primary">
-            2️⃣ Efficient Frontier Visualization
-          </h2>
-          <p className="text-muted-foreground">
-            Compute and visualize the Efficient Frontier to identify optimal portfolios 
-            that provide the highest expected return for a given level of risk using 
-            quantitative modeling.
-          </p>
-        </div>
-
-        {/* Feature 3 */}
-        <div className="auth-card">
-          <h2 className="text-xl font-semibold mb-3 text-primary">
-            3️⃣ Maximum Sharpe Ratio Portfolio
-          </h2>
-          <p className="text-muted-foreground">
-            Identify the portfolio offering the best risk-adjusted return 
-            by maximizing the Sharpe Ratio — balancing volatility against 
-            excess returns over the risk-free rate.
-          </p>
-        </div>
-
-        {/* Feature 4 */}
-        <div className="auth-card">
-          <h2 className="text-xl font-semibold mb-3 text-primary">
-            4️⃣ Diversification Analysis
-          </h2>
-          <p className="text-muted-foreground">
-            Analyze asset correlations and concentration levels to detect 
-            overexposure, reduce systematic risk, and improve portfolio diversification.
-          </p>
-        </div>
-
-        {/* Feature 5 */}
-        <div className="auth-card md:col-span-2 lg:col-span-1">
-          <h2 className="text-xl font-semibold mb-3 text-primary">
-            5️⃣ Model-Based Rebalancing Simulation
-          </h2>
-          <p className="text-muted-foreground">
-            Compare a user’s current allocation with optimized model weights 
-            and simulate rebalancing adjustments to enhance long-term performance 
-            and stability.
-          </p>
-        </div>
-
+      <section className="overview-grid">
+        {overviewCards.map((card) => (
+          <article key={card.label} className={`overview-card overview-card-${card.tone}`}>
+            <p className="overview-label">{card.label}</p>
+            <h2 className="overview-value overview-value-muted">{card.title}</h2>
+            <p className="overview-note overview-note-muted">{card.note}</p>
+          </article>
+        ))}
       </section>
 
-      {/* Footer / CTA */}
-      <section className="max-w-6xl mx-auto text-center mt-20">
-        <p className="text-lg text-muted-foreground mb-6">
-          Built for data-driven investors who value optimization, precision, and performance.
-        </p>
-        <button className="bg-primary text-primary-foreground px-8 py-3 rounded-xl font-semibold shadow-md hover:opacity-90 transition">
-          Get Started
-        </button>
-      </section>
+      <section className="dashboard-main-grid">
+        <div className="dashboard-left-column">
+          <article className="panel-card">
+            <div className="panel-header">
+              <div>
+                <h3>Project Summary</h3>
+                <p>Main purpose of the system</p>
+              </div>
+            </div>
 
+            <div className="dashboard-empty-state dashboard-empty-state-tall">
+              <div className="dashboard-empty-icon dashboard-empty-icon-violet">PT</div>
+              <p className="dashboard-empty-title">Project Expense Tracking Software</p>
+              <p className="dashboard-empty-copy dashboard-empty-copy-wide">
+                This dashboard layout is ready for real data, but currently avoids fake financial values. Use your backend or actual analysis output to populate cards, charts, and tables.
+              </p>
+            </div>
+          </article>
+
+          <article className="panel-card">
+            <div className="panel-header">
+              <div>
+                <h3>Key Features</h3>
+                <p>What the platform is designed to support</p>
+              </div>
+            </div>
+
+            <div className="dashboard-bullet-list">
+              {quickPoints.map((point) => (
+                <div key={point} className="dashboard-bullet-item dashboard-bullet-item-start">
+                  <span className="dashboard-bullet-dot" />
+                  <p>{point}</p>
+                </div>
+              ))}
+            </div>
+          </article>
+        </div>
+
+        <article className="panel-card transactions-panel">
+          <div className="panel-header">
+            <div>
+              <h3>Latest Activity</h3>
+              <p>This area is intentionally left without sample records</p>
+            </div>
+          </div>
+
+          <div className="dashboard-empty-state dashboard-empty-state-tall">
+            <div className="dashboard-empty-icon dashboard-empty-icon-sky">--</div>
+            <p className="dashboard-empty-title">No fake activity shown</p>
+            <p className="dashboard-empty-copy dashboard-empty-copy-wide">
+              Add real transactions, portfolio logs, or backend-driven activity here when you are ready. Until then, this section stays clean and truthful.
+            </p>
+          </div>
+        </article>
+      </section>
     </div>
   );
 }

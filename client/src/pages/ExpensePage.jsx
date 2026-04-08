@@ -52,6 +52,7 @@ export default function ExpensePage() {
   const [recurringNotice, setRecurringNotice] = useState("");
   const [editingId, setEditingId] = useState(null);
   const [editForm, setEditForm] = useState({});
+  const [activeCategory, setActiveCategory] = useState(null);
 
   const token = localStorage.getItem("token");
   const headers = { Authorization: `Bearer ${token}` };
@@ -139,23 +140,30 @@ export default function ExpensePage() {
 
   const monthChange = analytics ? analytics.thisTotal - analytics.prevTotal : 0;
   const monthChangePercent = analytics?.prevTotal ? ((monthChange / analytics.prevTotal) * 100).toFixed(1) : null;
+  const safeToSpend = analytics ? Math.max(0, analytics.totalBalance - analytics.thisTotal) : 0;
+  const activeCategoryIndex = analytics?.categoryBreakdown?.findIndex((cat) => cat.name === activeCategory) ?? -1;
 
   return (
-    <div className="min-h-screen bg-background text-foreground px-4 py-10 max-w-6xl mx-auto space-y-8">
-      <div>
-        <h1 className="text-3xl font-bold">Expense Tracker</h1>
-        <p className="text-muted-foreground mt-1 text-sm">Track, categorize and analyze your spending.</p>
-      </div>
+    <div className="dashboard-shell space-y-8">
+      <section className="dashboard-page-header">
+        <div>
+          <p className="dashboard-eyebrow">Spending Center</p>
+          <h1 className="dashboard-title dashboard-page-title">Expense Tracker</h1>
+          <p className="dashboard-subtitle">
+            Track where money goes, monitor category patterns, and keep your spend control tools in one cleaner workspace.
+          </p>
+        </div>
+      </section>
 
       {recurringNotice && (
-        <div className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-700 flex items-center justify-between">
+        <div className="dashboard-soft-banner dashboard-soft-banner-blue flex items-center justify-between">
           <span>{recurringNotice}</span>
           <button onClick={() => setRecurringNotice("")} className="text-blue-400 hover:text-blue-600 ml-4">×</button>
         </div>
       )}
 
       {analytics && (
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="dashboard-stat-grid">
           <SummaryCard label="This Month" value={formatFullINR(analytics.thisTotal)} color="red" />
           <SummaryCard label="vs Last Month"
             value={monthChange >= 0 ? `+${formatFullINR(monthChange)}` : formatFullINR(monthChange)}
@@ -169,31 +177,42 @@ export default function ExpensePage() {
       )}
 
       {analytics && (
-        <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800 flex items-center justify-between">
-          <span>Total Balance: <strong>{formatFullINR(analytics.totalBalance)}</strong></span>
-          <span className="text-xs text-emerald-600">Expenses cannot exceed this</span>
+        <div className="dashboard-balance-card">
+          <div>
+            <p className="dashboard-balance-label">Total Balance</p>
+            <p className="dashboard-balance-value">{formatFullINR(analytics.totalBalance)}</p>
+            <p className="dashboard-balance-copy">This is the maximum available amount your expense entries can use.</p>
+          </div>
+          <div className="dashboard-balance-meta">
+            <div className="dashboard-balance-chip">
+              <span>Safe to Spend</span>
+              <strong>{formatFullINR(safeToSpend)}</strong>
+            </div>
+            <div className="dashboard-balance-chip dashboard-balance-chip-muted">
+              <span>This Month</span>
+              <strong>{formatFullINR(analytics.thisTotal)}</strong>
+            </div>
+          </div>
         </div>
       )}
 
       {/* Tabs */}
-      <div className="flex gap-1 border-b border-border">
+      <div className="dashboard-tabbar">
         {["add", "analytics", "forecast", "records", "categories"].map((tab) => (
           <button key={tab} onClick={() => setActiveTab(tab)}
-            className={`px-4 py-2 text-sm font-medium capitalize transition-all border-b-2 -mb-px ${
-              activeTab === tab ? "border-blue-500 text-blue-600" : "border-transparent text-muted-foreground hover:text-foreground"
-            }`}>{tab}</button>
+            className={`dashboard-tab ${activeTab === tab ? "dashboard-tab-active" : ""}`}>{tab}</button>
         ))}
       </div>
 
       {/* Tab: Add */}
       {activeTab === "add" && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-          <div className="auth-card space-y-4">
+        <div className="dashboard-tab-panel grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div className="panel-card space-y-4">
             <h2 className="text-base font-semibold">Add Expense</h2>
             <div className="space-y-1">
-              <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Amount (₹)</label>
+              <label className="dashboard-field-label">Amount (INR)</label>
               <input type="number" min="0"
-                className="w-full rounded-lg border border-border px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="dashboard-input"
                 placeholder="e.g. 500" value={form.amount}
                 onChange={(e) => setForm({ ...form, amount: e.target.value })} />
               {analytics && form.amount && Number(form.amount) > analytics.totalBalance && (
@@ -201,33 +220,31 @@ export default function ExpensePage() {
               )}
             </div>
             <div className="space-y-1">
-              <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Category</label>
-              <select className="w-full rounded-lg border border-border px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-blue-500"
+              <label className="dashboard-field-label">Category</label>
+              <select className="dashboard-input"
                 value={form.categoryId} onChange={(e) => setForm({ ...form, categoryId: e.target.value })}>
                 {categories.map((c) => <option key={c._id} value={c._id}>{c.icon} {c.name}</option>)}
               </select>
             </div>
             <div className="space-y-1">
-              <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Payment Mode</label>
+              <label className="dashboard-field-label">Payment Mode</label>
               <div className="flex flex-wrap gap-2">
                 {PAYMENT_MODES.map((m) => (
                   <button key={m} onClick={() => setForm({ ...form, paymentMode: m })}
-                    className={`px-3 py-1 rounded-lg border text-xs font-medium transition-all ${
-                      form.paymentMode === m ? "border-blue-500 bg-blue-50 text-blue-700" : "border-border text-muted-foreground hover:border-blue-300"
-                    }`}>{m}</button>
+                    className={`dashboard-toggle-button ${form.paymentMode === m ? "dashboard-toggle-button-active" : ""}`}>{m}</button>
                 ))}
               </div>
             </div>
             <div className="space-y-1">
-              <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Date</label>
+              <label className="dashboard-field-label">Date</label>
               <input type="date"
-                className="w-full rounded-lg border border-border px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="dashboard-input"
                 value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} />
             </div>
             <div className="space-y-1">
-              <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Note (optional)</label>
+              <label className="dashboard-field-label">Note (optional)</label>
               <input type="text"
-                className="w-full rounded-lg border border-border px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="dashboard-input"
                 placeholder="e.g. Lunch with team" value={form.note}
                 onChange={(e) => setForm({ ...form, note: e.target.value })} />
             </div>
@@ -239,9 +256,9 @@ export default function ExpensePage() {
               </label>
               {form.isRecurring && (
                 <div className="space-y-1 pl-6">
-                  <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Repeat for how many months?</label>
+                  <label className="dashboard-field-label">Repeat for how many months?</label>
                   <input type="number" min="1"
-                    className="w-full rounded-lg border border-border px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="dashboard-input"
                     placeholder="Leave blank for indefinite" value={form.recurringMonthsLeft}
                     onChange={(e) => setForm({ ...form, recurringMonthsLeft: e.target.value })} />
                   <p className="text-xs text-muted-foreground">Leave blank to repeat indefinitely</p>
@@ -251,12 +268,10 @@ export default function ExpensePage() {
             {error && <p className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{error}</p>}
             {success && <p className="text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2">{success}</p>}
             <button onClick={handleSubmit} disabled={submitting}
-              className={`w-full rounded-xl py-2.5 text-sm font-semibold transition-all ${
-                submitting ? "bg-secondary text-muted-foreground cursor-not-allowed" : "bg-blue-600 text-white hover:bg-blue-700"
-              }`}>{submitting ? "Saving..." : "+ Add Expense"}</button>
+              className={`dashboard-primary-button w-full ${submitting ? "opacity-60 cursor-not-allowed" : ""}`}>{submitting ? "Saving..." : "+ Add Expense"}</button>
           </div>
 
-          <div className="auth-card">
+          <div className="panel-card">
             <h2 className="text-sm font-semibold mb-4">Daily Spending This Month</h2>
             {analytics?.dailySpending?.some((d) => d.total > 0) ? (
               <ResponsiveContainer width="100%" height={260}>
@@ -264,12 +279,16 @@ export default function ExpensePage() {
                   <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
                   <XAxis dataKey="day" tick={{ fontSize: 10 }} />
                   <YAxis tickFormatter={formatINR} tick={{ fontSize: 10 }} />
-                  <Tooltip formatter={(v) => formatFullINR(v)} labelFormatter={(d) => `Day ${d}`} />
+                  <Tooltip content={<ChartTooltip labelPrefix="Day " valueLabel="Spent" />} cursor={false} />
                   <Line type="monotone" dataKey="total" stroke="#3b82f6" strokeWidth={2} dot={false} name="Spent" />
                 </LineChart>
               </ResponsiveContainer>
             ) : (
-              <p className="text-sm text-muted-foreground text-center py-10">No expenses logged this month yet.</p>
+              <div className="dashboard-empty-state dashboard-empty-state-compact">
+                <div className="dashboard-empty-icon dashboard-empty-icon-rose">EX</div>
+                <p className="dashboard-empty-title">No expenses logged this month yet</p>
+                <p className="dashboard-empty-copy">Your daily spending trend will appear here once expense entries are added.</p>
+              </div>
             )}
           </div>
         </div>
@@ -277,53 +296,72 @@ export default function ExpensePage() {
 
       {/* Tab: Analytics */}
       {activeTab === "analytics" && analytics && (
-        <div className="space-y-6">
-          <div className="auth-card">
-            <h2 className="text-sm font-semibold mb-4">Income vs Expenses — Last 6 Months</h2>
-            <ResponsiveContainer width="100%" height={220}>
-              <BarChart data={analytics.monthComparison}>
-                <XAxis dataKey="month" tickFormatter={formatMonthKey} tick={{ fontSize: 11 }} />
-                <YAxis tickFormatter={formatINR} tick={{ fontSize: 11 }} />
-                <Tooltip formatter={(v, name, props) => {
-                  const income = props.payload?.income || 0;
-                  const pct = income > 0 && name !== "Income" ? ` (${((v / income) * 100).toFixed(1)}% of income)` : "";
-                  return [`${formatFullINR(v)}${pct}`, name];
-                }} labelFormatter={formatMonthKey} />
-                <Legend />
-                <Bar dataKey="income" fill="#10b981" radius={[4, 4, 0, 0]} name="Income" />
-                <Bar dataKey="expenses" fill="#ef4444" radius={[4, 4, 0, 0]} name="Expenses" />
-              </BarChart>
-            </ResponsiveContainer>
+        <div className="dashboard-tab-panel space-y-6">
+          <div className="panel-card">
+            <h2 className="text-sm font-semibold mb-4">Income vs Expenses - Last 6 Months</h2>
+            {analytics.monthComparison?.length > 0 ? (
+              <ResponsiveContainer width="100%" height={220}>
+                <BarChart data={analytics.monthComparison}>
+                  <XAxis dataKey="month" tickFormatter={formatMonthKey} tick={{ fontSize: 11 }} />
+                  <YAxis tickFormatter={formatINR} tick={{ fontSize: 11 }} />
+                  <Tooltip content={<ComparisonTooltip />} cursor={false} />
+                  <Legend />
+                  <Bar dataKey="income" fill="#10b981" radius={[4, 4, 0, 0]} name="Income" />
+                  <Bar dataKey="expenses" fill="#ef4444" radius={[4, 4, 0, 0]} name="Expenses" />
+                </BarChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="dashboard-empty-state dashboard-empty-state-compact">
+                <div className="dashboard-empty-icon dashboard-empty-icon-violet">AN</div>
+                <p className="dashboard-empty-title">No analytics for this period yet</p>
+                <p className="dashboard-empty-copy">Add an expense entry to unlock month-by-month comparisons and category insights.</p>
+                <button onClick={() => setActiveTab("add")} className="dashboard-primary-button">Get started by adding an expense</button>
+              </div>
+            )}
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {analytics.categoryBreakdown.length > 0 && (
-              <div className="auth-card">
+              <div className="panel-card">
                 <h2 className="text-sm font-semibold mb-4">Spending by Category</h2>
                 <ResponsiveContainer width="100%" height={220}>
                   <PieChart>
-                    <Pie data={analytics.categoryBreakdown} dataKey="total" nameKey="name"
+                    <Pie
+                      activeIndex={activeCategoryIndex >= 0 ? activeCategoryIndex : undefined}
+                      data={analytics.categoryBreakdown} dataKey="total" nameKey="name"
                       cx="50%" cy="50%" outerRadius={85} innerRadius={45} paddingAngle={2}
+                      onMouseEnter={(_, index) => setActiveCategory(analytics.categoryBreakdown[index]?.name || null)}
+                      onMouseLeave={() => setActiveCategory(null)}
                       labelLine={false} label={renderCustomLabel}>
-                      {analytics.categoryBreakdown.map((e) => <Cell key={e.name} fill={e.color} />)}
+                      {analytics.categoryBreakdown.map((e) => (
+                        <Cell
+                          key={e.name}
+                          fill={e.color}
+                          fillOpacity={!activeCategory || activeCategory === e.name ? 1 : 0.35}
+                          stroke={activeCategory === e.name ? "#ffffff" : "transparent"}
+                          strokeWidth={activeCategory === e.name ? 4 : 0}
+                        />
+                      ))}
                     </Pie>
                     <Legend />
-                    <Tooltip formatter={(v, name) => {
-                      const pct = analytics.thisTotal > 0 ? ` (${((v / analytics.thisTotal) * 100).toFixed(1)}%)` : "";
-                      return [`${formatFullINR(v)}${pct}`, name];
-                    }} />
+                    <Tooltip content={<CategoryTooltip total={analytics.thisTotal} />} cursor={false} />
                   </PieChart>
                 </ResponsiveContainer>
               </div>
             )}
             {analytics.categoryBreakdown.length > 0 && (
-              <div className="auth-card">
+              <div className="panel-card">
                 <h2 className="text-sm font-semibold mb-4">Category Breakdown</h2>
                 <div className="space-y-3">
                   {analytics.categoryBreakdown.map((cat) => {
                     const pct = analytics.thisTotal > 0 ? ((cat.total / analytics.thisTotal) * 100).toFixed(1) : 0;
                     return (
-                      <div key={cat.name}>
+                      <div
+                        key={cat.name}
+                        className={`dashboard-breakdown-item ${activeCategory === cat.name ? "dashboard-breakdown-item-active" : ""}`}
+                        onMouseEnter={() => setActiveCategory(cat.name)}
+                        onMouseLeave={() => setActiveCategory(null)}
+                      >
                         <div className="flex justify-between text-sm mb-1">
                           <span className="font-medium">{cat.icon} {cat.name}</span>
                           <span className="text-muted-foreground">{formatFullINR(cat.total)} · {pct}%</span>
@@ -337,21 +375,31 @@ export default function ExpensePage() {
                 </div>
               </div>
             )}
+            {analytics.categoryBreakdown.length === 0 && (
+              <div className="panel-card lg:col-span-2">
+                <div className="dashboard-empty-state dashboard-empty-state-compact">
+                  <div className="dashboard-empty-icon dashboard-empty-icon-sky">CT</div>
+                  <p className="dashboard-empty-title">No category split available yet</p>
+                  <p className="dashboard-empty-copy">Once you add expenses, this area will show what is driving your spending mix.</p>
+                  <button onClick={() => setActiveTab("add")} className="dashboard-primary-button">Get started by adding an expense</button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}
 
       {/* Tab: Forecast */}
       {activeTab === "forecast" && analytics && (
-        <div className="space-y-6">
+        <div className="dashboard-tab-panel space-y-6">
           <p className="text-sm text-muted-foreground">Projected next 6 months based on recurring income and expenses.</p>
-          <div className="auth-card">
+          <div className="panel-card">
             <h2 className="text-sm font-semibold mb-4">6-Month Forecast</h2>
             <ResponsiveContainer width="100%" height={240}>
               <BarChart data={analytics.expenseForecast || []}>
                 <XAxis dataKey="month" tickFormatter={formatMonthKey} tick={{ fontSize: 11 }} />
                 <YAxis tickFormatter={formatINR} tick={{ fontSize: 11 }} />
-                <Tooltip formatter={(v) => formatFullINR(v)} labelFormatter={formatMonthKey} />
+                <Tooltip content={<ChartTooltip labelFormatter={formatMonthKey} valueLabel="Projected" />} cursor={false} />
                 <Legend />
                 <Bar dataKey="projectedIncome" fill="#10b981" radius={[4, 4, 0, 0]} name="Projected Income" />
                 <Bar dataKey="projectedExpenses" fill="#f97316" radius={[4, 4, 0, 0]} name="Projected Expenses" />
@@ -359,9 +407,9 @@ export default function ExpensePage() {
             </ResponsiveContainer>
           </div>
           {analytics.expenseForecast?.length > 0 && (
-            <div className="auth-card overflow-x-auto">
+            <div className="panel-card overflow-x-auto">
               <h2 className="text-sm font-semibold mb-4">Forecast Breakdown</h2>
-              <table className="w-full text-sm">
+              <table className="w-full text-sm dashboard-data-table">
                 <thead>
                   <tr className="border-b border-border text-left text-xs text-muted-foreground uppercase tracking-wide">
                     <th className="pb-2 pr-4">Month</th>
@@ -391,36 +439,40 @@ export default function ExpensePage() {
 
       {/* Tab: Records */}
       {activeTab === "records" && (
-        <div className="space-y-4">
+        <div className="dashboard-tab-panel space-y-4">
           <div className="flex items-center gap-3 flex-wrap">
             <div className="flex gap-2">
               <button onClick={() => setFilterMode("month")}
-                className={`px-3 py-1.5 rounded-lg border text-xs font-medium transition-all ${filterMode === "month" ? "border-blue-500 bg-blue-50 text-blue-700" : "border-border text-muted-foreground"}`}>
+                className={`dashboard-toggle-button ${filterMode === "month" ? "dashboard-toggle-button-active" : ""}`}>
                 By Month
               </button>
               <button onClick={() => setFilterMode("year")}
-                className={`px-3 py-1.5 rounded-lg border text-xs font-medium transition-all ${filterMode === "year" ? "border-blue-500 bg-blue-50 text-blue-700" : "border-border text-muted-foreground"}`}>
+                className={`dashboard-toggle-button ${filterMode === "year" ? "dashboard-toggle-button-active" : ""}`}>
                 By Year
               </button>
             </div>
             {filterMode === "month" ? (
               <input type="month"
-                className="rounded-lg border border-border px-3 py-1.5 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="dashboard-input"
                 value={selectedMonth} onChange={(e) => setSelectedMonth(e.target.value)} />
             ) : (
-              <select className="rounded-lg border border-border px-3 py-1.5 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-blue-500"
+              <select className="dashboard-input"
                 value={selectedYear} onChange={(e) => setSelectedYear(e.target.value)}>
                 {YEARS.map((y) => <option key={y} value={y}>{y}</option>)}
               </select>
             )}
           </div>
 
-          <div className="auth-card">
+          <div className="panel-card">
             {expenses.length === 0 ? (
-              <p className="text-sm text-muted-foreground text-center py-8">No expenses for this period.</p>
+              <div className="dashboard-empty-state dashboard-empty-state-compact">
+                <div className="dashboard-empty-icon dashboard-empty-icon-amber">0</div>
+                <p className="dashboard-empty-title">No expenses for this period</p>
+                <p className="dashboard-empty-copy">Change the filter or add a new expense to populate this table.</p>
+              </div>
             ) : (
               <div className="overflow-x-auto">
-                <table className="w-full text-sm">
+                <table className="w-full text-sm dashboard-data-table">
                   <thead>
                     <tr className="border-b border-border text-left text-xs text-muted-foreground uppercase tracking-wide">
                       <th className="pb-2 pr-3">Date</th>
@@ -510,19 +562,19 @@ export default function ExpensePage() {
 
       {/* Tab: Categories */}
       {activeTab === "categories" && (
-        <div className="space-y-4">
+        <div className="dashboard-tab-panel space-y-4">
           <div className="flex justify-between items-center">
             <h2 className="text-sm font-semibold">Your Categories</h2>
             <button onClick={() => setShowCatForm(!showCatForm)}
-              className="px-3 py-1.5 rounded-lg bg-blue-600 text-white text-xs font-semibold hover:bg-blue-700 transition-colors">
+              className="dashboard-primary-button">
               + Add Category
             </button>
           </div>
           {showCatForm && (
-            <div className="auth-card space-y-3 max-w-sm">
+            <div className="panel-card space-y-3 max-w-sm">
               <h3 className="text-sm font-semibold">New Category</h3>
               <input type="text"
-                className="w-full rounded-lg border border-border px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="dashboard-input"
                 placeholder="Category name" value={catForm.name}
                 onChange={(e) => setCatForm({ ...catForm, name: e.target.value })} />
               <div className="flex gap-3 items-center">
@@ -537,30 +589,30 @@ export default function ExpensePage() {
                   <div className="flex gap-2">
                     {["need", "want"].map((t) => (
                       <button key={t} onClick={() => setCatForm({ ...catForm, type: t })}
-                        className={`flex-1 py-1.5 rounded-lg border text-xs font-medium capitalize transition-all ${
-                          catForm.type === t ? "border-blue-500 bg-blue-50 text-blue-700" : "border-border text-muted-foreground"
-                        }`}>{t}</button>
+                        className={`dashboard-toggle-button flex-1 capitalize ${catForm.type === t ? "dashboard-toggle-button-active" : ""}`}>{t}</button>
                     ))}
                   </div>
                 </div>
               </div>
-              <button onClick={handleAddCategory} className="w-full rounded-xl py-2 text-sm font-semibold bg-blue-600 text-white hover:bg-blue-700 transition-colors">
+              <button onClick={handleAddCategory} className="dashboard-primary-button w-full">
                 Save Category
               </button>
             </div>
           )}
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
             {categories.map((cat) => (
-              <div key={cat._id} className="auth-card p-4 flex items-center justify-between">
+              <div key={cat._id} className="panel-card dashboard-category-card p-4 flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <span className="text-lg">{cat.icon}</span>
                   <div>
                     <p className="text-sm font-medium">{cat.name}</p>
-                    <p className="text-xs text-muted-foreground capitalize">{cat.type}</p>
+                    <span className={`dashboard-type-tag ${cat.type === "need" ? "dashboard-type-tag-need" : "dashboard-type-tag-want"}`}>
+                      {cat.type}
+                    </span>
                   </div>
                 </div>
                 {!cat.isDefault && (
-                  <button onClick={() => handleDeleteCategory(cat._id)} className="text-xs text-red-400 hover:text-red-600">×</button>
+                  <button onClick={() => handleDeleteCategory(cat._id)} className="text-xs text-red-400 hover:text-red-600">x</button>
                 )}
               </div>
             ))}
@@ -571,18 +623,70 @@ export default function ExpensePage() {
   );
 }
 
+function ChartTooltip({ active, payload, label, labelFormatter, labelPrefix = "", valueLabel = "Value" }) {
+  if (!active || !payload?.length) return null;
+  const formattedLabel = labelFormatter ? labelFormatter(label) : `${labelPrefix}${label}`;
+  return (
+    <div className="dashboard-chart-tooltip">
+      <p className="dashboard-chart-tooltip-label">{formattedLabel}</p>
+      <div className="dashboard-chart-tooltip-row">
+        <span>{valueLabel}</span>
+        <strong>{formatFullINR(payload[0].value || 0)}</strong>
+      </div>
+    </div>
+  );
+}
+
+function ComparisonTooltip({ active, payload, label }) {
+  if (!active || !payload?.length) return null;
+  const income = payload.find((item) => item.dataKey === "income")?.value || 0;
+  const expenses = payload.find((item) => item.dataKey === "expenses")?.value || 0;
+  const ratio = income > 0 ? `${((expenses / income) * 100).toFixed(1)}% of income` : "No income logged";
+  return (
+    <div className="dashboard-chart-tooltip">
+      <p className="dashboard-chart-tooltip-label">{formatMonthKey(label)}</p>
+      <div className="dashboard-chart-tooltip-row">
+        <span>Income</span>
+        <strong>{formatFullINR(income)}</strong>
+      </div>
+      <div className="dashboard-chart-tooltip-row">
+        <span>Expenses</span>
+        <strong>{formatFullINR(expenses)}</strong>
+      </div>
+      <p className="dashboard-chart-tooltip-meta">{ratio}</p>
+    </div>
+  );
+}
+
+function CategoryTooltip({ active, payload, total }) {
+  if (!active || !payload?.length) return null;
+  const item = payload[0]?.payload;
+  if (!item) return null;
+  const percentage = total > 0 ? `${((item.total / total) * 100).toFixed(1)}% of this month` : "No total yet";
+  return (
+    <div className="dashboard-chart-tooltip">
+      <p className="dashboard-chart-tooltip-label">{item.icon} {item.name}</p>
+      <div className="dashboard-chart-tooltip-row">
+        <span>Spent</span>
+        <strong>{formatFullINR(item.total)}</strong>
+      </div>
+      <p className="dashboard-chart-tooltip-meta">{percentage}</p>
+    </div>
+  );
+}
+
 function SummaryCard({ label, value, color, sub }) {
   const colors = {
-    red: "bg-red-50 border-red-200 text-red-700",
-    emerald: "bg-emerald-50 border-emerald-200 text-emerald-700",
-    violet: "bg-violet-50 border-violet-200 text-violet-700",
-    blue: "bg-blue-50 border-blue-200 text-blue-700",
+    red: "dashboard-stat-card dashboard-stat-card-red",
+    emerald: "dashboard-stat-card dashboard-stat-card-emerald",
+    violet: "dashboard-stat-card dashboard-stat-card-violet",
+    blue: "dashboard-stat-card dashboard-stat-card-blue",
   };
   return (
-    <div className={`rounded-2xl border p-4 ${colors[color]}`}>
-      <p className="text-xs font-semibold uppercase tracking-widest opacity-70 mb-1">{label}</p>
-      <p className="text-xl font-bold">{value}</p>
-      {sub && <p className="text-xs mt-1 opacity-60">{sub}</p>}
+    <div className={colors[color]}>
+      <p className="dashboard-stat-label">{label}</p>
+      <p className="dashboard-stat-value dashboard-stat-value-sm">{value}</p>
+      {sub && <p className="dashboard-stat-subtext">{sub}</p>}
     </div>
   );
 }
