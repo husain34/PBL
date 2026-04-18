@@ -1,5 +1,5 @@
 const express = require("express");
-const mongoose = require("mongoose");
+
 const cors = require("cors");
 require("dotenv").config();
 
@@ -11,19 +11,15 @@ const categoryRoutes = require("./routes/categoryRoutes");
 const goalRoutes = require("./routes/goalRoutes");
 const portfolioRoutes = require("./routes/portfolioRoutes");
 
-// Ensure models are registered
-require("./models/GoalAllocation");
-require("./models/PortfolioHolding");
+// Ensure models are registered (removed for Supabase migration)
 
 const app = express();
 
 app.use(cors());
 app.use(express.json());
 
-mongoose
-  .connect(process.env.MONGO_URI)
-  .then(() => console.log("MongoDB connected"))
-  .catch((err) => console.error("MongoDB connection error:", err));
+// Supabase is initialized in config/supabase.js, no need to connect here
+
 
 app.use("/api/auth", authRoutes);
 app.use("/api/profile", profileRoutes);

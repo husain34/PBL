@@ -1,6 +1,6 @@
 const express = require("express");
 const jwt = require("jsonwebtoken");
-const Category = require("../models/Category");
+const supabase = require("../config/supabase");
 
 const router = express.Router();
 
@@ -30,54 +30,84 @@ const DEFAULT_CATEGORIES = [
   { name: "Other", icon: "📦", color: "#6b7280", type: "want" },
 ];
 
-// GET /api/categories — fetch all categories for user, seed defaults if none exist
 router.get("/", authMiddleware, async (req, res) => {
   try {
-    let categories = await Category.find({ userId: req.userId });
+    let { data: categories, error } = await supabase
+      .from("categories")
+      .select()
+      .eq("user_id", req.userId);
 
-    if (categories.length === 0) {
+    if (error) throw error;
+
+    if (!categories || categories.length === 0) {
       const defaults = DEFAULT_CATEGORIES.map((c) => ({
         ...c,
-        userId: req.userId,
-        isDefault: true,
+        user_id: req.userId,
+        is_default: true,
       }));
-      categories = await Category.insertMany(defaults);
+      
+      const { data: inserted, error: insertError } = await supabase
+        .from("categories")
+        .insert(defaults)
+        .select();
+        
+      if (insertError) throw insertError;
+      categories = inserted;
     }
 
-    res.json(categories);
+    const formatted = categories.map(c => ({
+      ...c,
+      _id: c.id,
+      userId: c.user_id,
+      isDefault: c.is_default
+    }));
+
+    res.json(formatted);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-// POST /api/categories — create custom category
 router.post("/", authMiddleware, async (req, res) => {
   const { name, icon, color, type } = req.body;
   if (!name) return res.status(400).json({ message: "Name is required" });
   try {
-    const category = await Category.create({
-      userId: req.userId,
-      name,
-      icon: icon || "📦",
-      color: color || "#6b7280",
-      type: type || "want",
-      isDefault: false,
+    const { data: category, error } = await supabase
+      .from("categories")
+      .insert({
+        user_id: req.userId,
+        name,
+        icon: icon || "📦",
+        color: color || "#6b7280",
+        type: type || "want",
+        is_default: false,
+      })
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    res.status(201).json({
+      ...category,
+      _id: category.id,
+      userId: category.user_id,
+      isDefault: category.is_default
     });
-    res.status(201).json(category);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-// DELETE /api/categories/:id — delete custom category
 router.delete("/:id", authMiddleware, async (req, res) => {
   try {
-    const cat = await Category.findOneAndDelete({
-      _id: req.params.id,
-      userId: req.userId,
-      isDefault: false,
-    });
-    if (!cat) return res.status(404).json({ message: "Category not found or is a default" });
+    const { error } = await supabase
+      .from("categories")
+      .delete()
+      .eq("id", req.params.id)
+      .eq("user_id", req.userId)
+      .eq("is_default", false);
+
+    if (error) throw error;
     res.json({ message: "Deleted" });
   } catch (err) {
     res.status(500).json({ error: err.message });

@@ -1,7 +1,6 @@
 const express = require("express");
 const jwt = require("jsonwebtoken");
-const Income = require("../models/Income");
-const User = require("../models/User");
+const supabase = require("../config/supabase");
 
 const router = express.Router();
 
@@ -18,8 +17,17 @@ function authMiddleware(req, res, next) {
   }
 }
 
-// POST /api/income — add new income (non-salary only)
-// Blocks future-dated entries and salary source
+function formatIncome(i) {
+  if (!i) return null;
+  return {
+    ...i,
+    _id: i.id,
+    userId: i.user_id,
+    isSalary: i.is_salary
+  };
+}
+
+// POST /api/income
 router.post("/", authMiddleware, async (req, res) => {
   const { amount, source, frequency, date, note } = req.body;
   if (!amount || !source || !frequency || !date)
@@ -34,22 +42,27 @@ router.post("/", authMiddleware, async (req, res) => {
     return res.status(400).json({ message: "Cannot log income for a future date" });
 
   try {
-    const entry = await Income.create({
-      userId: req.userId,
+    const { data: entry, error: iErr } = await supabase.from('incomes').insert({
+      user_id: req.userId,
       amount: Number(amount),
       source,
       frequency,
-      date: entryDate,
+      date: entryDate.toISOString(),
       note: note || "",
-    });
-    await User.findByIdAndUpdate(req.userId, { $inc: { totalBalance: Number(amount) } });
-    res.status(201).json(entry);
+      is_salary: false
+    }).select().single();
+    if (iErr) throw iErr;
+
+    const { data: user } = await supabase.from('users').select('total_balance').eq('id', req.userId).single();
+    await supabase.from('users').update({ total_balance: (user.total_balance || 0) + Number(amount) }).eq('id', req.userId);
+
+    res.status(201).json(formatIncome(entry));
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-// PUT /api/income/salary — create or update salary for a specific month
+// PUT /api/income/salary
 router.put("/salary", authMiddleware, async (req, res) => {
   const { amount, note, month } = req.body;
   if (!amount || Number(amount) <= 0)
@@ -61,51 +74,58 @@ router.put("/salary", authMiddleware, async (req, res) => {
     
     if (month) {
       const [year, monthNum] = month.split("-");
-      monthStart = new Date(Number(year), Number(monthNum) - 1, 1);
-      monthEnd = new Date(Number(year), Number(monthNum), 0, 23, 59, 59);
+      monthStart = new Date(Number(year), Number(monthNum) - 1, 1).toISOString();
+      monthEnd = new Date(Number(year), Number(monthNum), 0, 23, 59, 59).toISOString();
     } else {
-      monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-      monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
+      monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+      monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59).toISOString();
     }
 
-    const existing = await Income.findOne({
-      userId: req.userId,
-      source: "Salary",
-      date: { $gte: monthStart, $lte: monthEnd },
-    });
+    const { data: existing } = await supabase.from('incomes')
+      .select()
+      .eq('user_id', req.userId)
+      .eq('source', 'Salary')
+      .gte('date', monthStart)
+      .lte('date', monthEnd)
+      .limit(1)
+      .maybeSingle();
 
-    const user = await User.findById(req.userId);
-    if (!user) return res.status(404).json({ message: "User not found" });
+    const { data: user, error: uErr } = await supabase.from('users').select('total_balance').eq('id', req.userId).single();
+    if (uErr) return res.status(404).json({ message: "User not found" });
 
     if (existing) {
       const diff = Number(amount) - existing.amount;
-      existing.amount = Number(amount);
-      existing.note = note || existing.note;
-      await existing.save();
-      user.totalBalance = Math.max(0, (user.totalBalance || 0) + diff);
-      await user.save();
-      return res.json({ entry: existing, totalBalance: user.totalBalance, updated: true });
+      const { data: updated } = await supabase.from('incomes').update({
+        amount: Number(amount),
+        note: note || existing.note
+      }).eq('id', existing.id).select().single();
+
+      const newBalance = Math.max(0, (user.total_balance || 0) + diff);
+      await supabase.from('users').update({ total_balance: newBalance }).eq('id', req.userId);
+      return res.json({ entry: formatIncome(updated), totalBalance: newBalance, updated: true });
     }
 
     const [year, monthNum] = (month || `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`).split("-");
-    const entry = await Income.create({
-      userId: req.userId,
+    const { data: entry } = await supabase.from('incomes').insert({
+      user_id: req.userId,
       amount: Number(amount),
       source: "Salary",
       frequency: "Monthly",
-      date: new Date(Number(year), Number(monthNum) - 1, 1),
+      date: new Date(Number(year), Number(monthNum) - 1, 1).toISOString(),
       note: note || "",
-    });
-    user.totalBalance = (user.totalBalance || 0) + Number(amount);
-    await user.save();
-    res.status(201).json({ entry, totalBalance: user.totalBalance, updated: false });
+      is_salary: true
+    }).select().single();
+
+    const newBalance = (user.total_balance || 0) + Number(amount);
+    await supabase.from('users').update({ total_balance: newBalance }).eq('id', req.userId);
+    res.status(201).json({ entry: formatIncome(entry), totalBalance: newBalance, updated: false });
   } catch (err) {
     console.error("Salary update error:", err);
     res.status(500).json({ error: err.message });
   }
 });
 
-// GET /api/income/salary — get salary entry for a specific month
+// GET /api/income/salary
 router.get("/salary", authMiddleware, async (req, res) => {
   try {
     const now = new Date();
@@ -114,42 +134,50 @@ router.get("/salary", authMiddleware, async (req, res) => {
     
     if (month) {
       const [year, monthNum] = month.split("-");
-      monthStart = new Date(Number(year), Number(monthNum) - 1, 1);
-      monthEnd = new Date(Number(year), Number(monthNum), 0, 23, 59, 59);
+      monthStart = new Date(Number(year), Number(monthNum) - 1, 1).toISOString();
+      monthEnd = new Date(Number(year), Number(monthNum), 0, 23, 59, 59).toISOString();
     } else {
-      monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-      monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
+      monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+      monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59).toISOString();
     }
     
-    const entry = await Income.findOne({
-      userId: req.userId,
-      source: "Salary",
-      date: { $gte: monthStart, $lte: monthEnd },
-    });
-    res.json({ entry: entry || null });
+    const { data: entry } = await supabase.from('incomes')
+      .select()
+      .eq('user_id', req.userId)
+      .eq('source', 'Salary')
+      .gte('date', monthStart)
+      .lte('date', monthEnd)
+      .limit(1)
+      .maybeSingle();
+
+    res.json({ entry: entry ? formatIncome(entry) : null });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-// PUT /api/income/:id — edit a non-salary income entry
+// PUT /api/income/:id
 router.put("/:id", authMiddleware, async (req, res) => {
   const { amount, source, frequency, note } = req.body;
   if (source === "Salary")
     return res.status(400).json({ message: "Use the salary endpoint to manage salary" });
   try {
-    const entry = await Income.findOne({ _id: req.params.id, userId: req.userId });
-    if (!entry) return res.status(404).json({ message: "Entry not found" });
+    const { data: entry, error: getErr } = await supabase.from('incomes').select().eq('id', req.params.id).eq('user_id', req.userId).single();
+    if (getErr || !entry) return res.status(404).json({ message: "Entry not found" });
 
     const diff = Number(amount) - entry.amount;
-    entry.amount = Number(amount) || entry.amount;
-    entry.source = source || entry.source;
-    entry.frequency = frequency || entry.frequency;
-    entry.note = note ?? entry.note;
-    await entry.save();
+    const updates = {};
+    if (amount !== undefined) updates.amount = Number(amount);
+    if (source !== undefined) updates.source = source;
+    if (frequency !== undefined) updates.frequency = frequency;
+    if (note !== undefined) updates.note = note;
 
-    await User.findByIdAndUpdate(req.userId, { $inc: { totalBalance: diff } });
-    res.json(entry);
+    const { data: updatedEntry } = await supabase.from('incomes').update(updates).eq('id', req.params.id).select().single();
+
+    const { data: user } = await supabase.from('users').select('total_balance').eq('id', req.userId).single();
+    await supabase.from('users').update({ total_balance: (user.total_balance || 0) + diff }).eq('id', req.userId);
+
+    res.json(formatIncome(updatedEntry));
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -158,8 +186,9 @@ router.put("/:id", authMiddleware, async (req, res) => {
 // GET /api/income
 router.get("/", authMiddleware, async (req, res) => {
   try {
-    const entries = await Income.find({ userId: req.userId }).sort({ date: -1 });
-    res.json(entries);
+    const { data: entries, error } = await supabase.from('incomes').select().eq('user_id', req.userId).order('date', { ascending: false });
+    if (error) throw error;
+    res.json(entries.map(formatIncome));
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -169,20 +198,17 @@ router.get("/", authMiddleware, async (req, res) => {
 router.get("/summary", authMiddleware, async (req, res) => {
   try {
     const now = new Date();
-    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-    const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+    const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59).toISOString();
 
-    const thisMonthEntries = await Income.find({
-      userId: req.userId,
-      date: { $gte: startOfMonth, $lte: endOfMonth },
-    });
-    const thisMonthTotal = thisMonthEntries.reduce((s, e) => s + e.amount, 0);
+    const { data: thisMonthEntries } = await supabase.from('incomes').select().eq('user_id', req.userId).gte('date', startOfMonth).lte('date', endOfMonth);
+    const thisMonthTotal = (thisMonthEntries || []).reduce((s, e) => s + e.amount, 0);
 
     const sixMonthsAgo = new Date();
     sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 5);
     sixMonthsAgo.setDate(1);
 
-    const allEntries = await Income.find({ userId: req.userId, date: { $gte: sixMonthsAgo } });
+    const { data: allEntries } = await supabase.from('incomes').select().eq('user_id', req.userId).gte('date', sixMonthsAgo.toISOString());
 
     const monthMap = {};
     for (let i = 5; i >= 0; i--) {
@@ -191,38 +217,35 @@ router.get("/summary", authMiddleware, async (req, res) => {
       const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
       monthMap[key] = { month: key, total: 0 };
     }
-    allEntries.forEach((e) => {
+    
+    (allEntries || []).forEach((e) => {
       const d = new Date(e.date);
       const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
       if (monthMap[key]) monthMap[key].total += e.amount;
     });
     const monthlyChart = Object.values(monthMap);
 
-    const allUserEntries = await Income.find({ userId: req.userId });
+    const { data: allUserEntries } = await supabase.from('incomes').select('source, amount').eq('user_id', req.userId);
     const sourceMap = {};
-    allUserEntries.forEach((e) => {
+    (allUserEntries || []).forEach((e) => {
       sourceMap[e.source] = (sourceMap[e.source] || 0) + e.amount;
     });
     const sourceBreakdown = Object.entries(sourceMap).map(([source, total]) => ({ source, total }));
 
-    // 6-month forecast: recurring/salary entries projected forward
     const forecast = [];
-    const salaryEntry = thisMonthEntries.find((e) => e.source === "Salary");
-    const recurringEntries = await Income.find({
-      userId: req.userId,
-      frequency: "Monthly",
-      date: { $gte: startOfMonth, $lte: endOfMonth },
-    });
+    const salaryEntry = (thisMonthEntries || []).find((e) => e.source === "Salary");
+    const recurringEntries = await supabase.from('incomes').select('amount').eq('user_id', req.userId).eq('frequency', 'Monthly').gte('date', startOfMonth).lte('date', endOfMonth);
+
     for (let i = 1; i <= 6; i++) {
       const d = new Date(now.getFullYear(), now.getMonth() + i, 1);
       const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-      const projected = recurringEntries.reduce((s, e) => s + e.amount, 0);
+      const projected = (recurringEntries.data || []).reduce((s, e) => s + e.amount, 0);
       forecast.push({ month: key, projected });
     }
 
-    const user = await User.findById(req.userId).select("totalBalance profileAnswers");
-    const profileIncome = user?.profileAnswers?.monthlyIncome || null;
-    const totalBalance = user?.totalBalance || 0;
+    const { data: user } = await supabase.from('users').select('total_balance, monthly_income').eq('id', req.userId).single();
+    const profileIncome = user?.monthly_income || null;
+    const totalBalance = user?.total_balance || 0;
 
     res.json({
       thisMonthTotal,
@@ -241,11 +264,12 @@ router.get("/summary", authMiddleware, async (req, res) => {
 // DELETE /api/income/:id
 router.delete("/:id", authMiddleware, async (req, res) => {
   try {
-    const entry = await Income.findOneAndDelete({ _id: req.params.id, userId: req.userId });
-    if (!entry) return res.status(404).json({ message: "Entry not found" });
-    const user = await User.findById(req.userId);
-    user.totalBalance = Math.max(0, (user.totalBalance || 0) - entry.amount);
-    await user.save();
+    const { data: entry, error: getErr } = await supabase.from('incomes').select('amount').eq('id', req.params.id).eq('user_id', req.userId).single();
+    if (getErr || !entry) return res.status(404).json({ message: "Entry not found" });
+
+    await supabase.from('incomes').delete().eq('id', req.params.id);
+    const { data: user } = await supabase.from('users').select('total_balance').eq('id', req.userId).single();
+    await supabase.from('users').update({ total_balance: Math.max(0, (user.total_balance || 0) - entry.amount) }).eq('id', req.userId);
     res.json({ message: "Deleted" });
   } catch (err) {
     res.status(500).json({ error: err.message });

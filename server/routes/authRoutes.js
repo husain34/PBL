@@ -1,7 +1,7 @@
 const express = require("express");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
-const User = require("../models/User");
+const supabase = require("../config/supabase");
 
 const router = express.Router();
 
@@ -9,13 +9,24 @@ router.post("/signup", async (req, res) => {
   const { name, email, password } = req.body;
 
   try {
-    const existingUser = await User.findOne({ email });
+    const { data: existingUser, error: checkError } = await supabase
+      .from("users")
+      .select("id")
+      .eq("email", email)
+      .maybeSingle();
+
+    if (checkError) throw checkError;
+
     if (existingUser)
       return res.status(400).json({ message: "User already exists" });
 
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    await User.create({ name, email, password: hashedPassword });
+    const { error: insertError } = await supabase
+      .from("users")
+      .insert({ name, email, password: hashedPassword });
+
+    if (insertError) throw insertError;
 
     res.status(201).json({ message: "User created successfully" });
   } catch (error) {
@@ -27,7 +38,13 @@ router.post("/login", async (req, res) => {
   const { email, password } = req.body;
 
   try {
-    const user = await User.findOne({ email });
+    const { data: user, error } = await supabase
+      .from("users")
+      .select("id, name, email, password")
+      .eq("email", email)
+      .maybeSingle();
+
+    if (error) throw error;
     if (!user)
       return res.status(400).json({ message: "Invalid credentials" });
 
@@ -36,7 +53,7 @@ router.post("/login", async (req, res) => {
       return res.status(400).json({ message: "Invalid credentials" });
 
     const token = jwt.sign(
-      { id: user._id },
+      { id: user.id },
       process.env.JWT_SECRET,
       { expiresIn: "1d" }
     );
