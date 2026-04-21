@@ -3,7 +3,6 @@ import { NavLink, useLocation } from "react-router-dom";
 import axios from "axios";
 
 const navItems = [
-  { label: "Dashboard", path: "/home", icon: DashboardIcon, group: "main" },
   { label: "Income", path: "/income", icon: IncomeIcon, group: "tracking" },
   { label: "Expenses", path: "/expenses", icon: ExpensesIcon, group: "tracking" },
   { label: "Goals", path: "/goals", icon: GoalsIcon, group: "planning" },
