@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useCallback } from "react";
-import axios from "axios";
+import axios from "../api/axios";
 import {
   PieChart, Pie, Cell, Legend, ResponsiveContainer,
   BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid
 } from "recharts";
 
-const API = "http://localhost:5000/api/portfolio";
+const API = "/portfolio";
 
 function formatFullINR(v) {
   return new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 2 }).format(v);

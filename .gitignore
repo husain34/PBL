@@ -1,4 +1,17 @@
 node_modules/
+
+# Environment files — NEVER commit these
 .env
-.DS_Store
+.env.local
+.env.*.local
+server/.env
+client/.env
+client/.env.local
+
+# Build output
 dist/
+build/
+
+# OS artifacts
+.DS_Store
+Thumbs.db

@@ -15,7 +15,16 @@ const portfolioRoutes = require("./routes/portfolioRoutes");
 
 const app = express();
 
-app.use(cors());
+const allowedOrigins = [
+  process.env.FRONTEND_URL,        // e.g. https://your-app.vercel.app
+  "http://localhost:5173",
+  "http://localhost:4173",
+].filter(Boolean);
+
+app.use(cors({
+  origin: allowedOrigins,
+  credentials: true,
+}));
 app.use(express.json());
 
 // Supabase is initialized in config/supabase.js, no need to connect here

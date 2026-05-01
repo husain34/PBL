@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import axios from "axios";
+import axios from "../api/axios";
 
 const questions = [
   {
@@ -146,7 +146,7 @@ export default function Questionnaire() {
     try {
       const token = localStorage.getItem("token");
       await axios.post(
-        "http://localhost:5000/api/profile/submit",
+        "/profile/submit",
         { answers: finalAnswers, ...computed },
         { headers: { Authorization: `Bearer ${token}` } }
       );

@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useCallback } from "react";
-import axios from "axios";
+import axios from "../api/axios";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 
-const API = "http://localhost:5000/api";
+const API = "";
 
 function formatFullINR(v) {
   return new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(v);

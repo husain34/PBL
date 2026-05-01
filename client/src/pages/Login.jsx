@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { Link } from "react-router-dom";
-import axios from "axios";
+import axios from "../api/axios";
 
 const quickStats = [
   { label: "Tracked", value: "24/7" },
@@ -15,10 +15,10 @@ const Login = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
-      const res = await axios.post("http://localhost:5000/api/auth/login", form);
+      const res = await axios.post("/auth/login", form);
       localStorage.setItem("token", res.data.token);
 
-      const profileRes = await axios.get("http://localhost:5000/api/profile", {
+      const profileRes = await axios.get("/profile", {
         headers: { Authorization: `Bearer ${res.data.token}` },
       });
 

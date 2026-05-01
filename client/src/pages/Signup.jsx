@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import axios from "axios";
+import axios from "../api/axios";
 
 const featurePoints = [
   "Personalized portfolio profiling",
@@ -21,7 +21,7 @@ const Signup = () => {
     e.preventDefault();
 
     try {
-      await axios.post("http://localhost:5000/api/auth/signup", form);
+      await axios.post("/auth/signup", form);
       alert("Signup successful!");
       navigate("/login");
     } catch (error) {

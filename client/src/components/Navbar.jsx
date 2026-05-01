@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { NavLink, useLocation } from "react-router-dom";
-import axios from "axios";
+import axios from "../api/axios";
 
 const navItems = [
   { label: "Income", path: "/income", icon: IncomeIcon, group: "tracking" },
@@ -34,7 +34,7 @@ export default function Navbar({ sidebarCollapsed, onToggleSidebar, theme, onTog
     if (!token) return;
 
     axios
-      .get("http://localhost:5000/api/profile", {
+      .get("/profile", {
         headers: { Authorization: `Bearer ${token}` },
       })
       .then((res) => {

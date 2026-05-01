@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from "react";
-import axios from "axios";
+import axios from "../api/axios";
 import {
   BarChart,
   Bar,
@@ -13,7 +13,7 @@ import {
   Legend,
 } from "recharts";
 
-const API = "http://localhost:5000/api";
+const API = "";
 
 const SOURCE_COLORS = {
   Freelance: "#f59e0b",
