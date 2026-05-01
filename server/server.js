@@ -16,7 +16,7 @@ const portfolioRoutes = require("./routes/portfolioRoutes");
 const app = express();
 
 const allowedOrigins = [
-  process.env.FRONTEND_URL,        // e.g. https://your-app.vercel.app
+  process.env.FRONTEND_URL ? process.env.FRONTEND_URL.replace(/\/$/, "") : null,
   "http://localhost:5173",
   "http://localhost:4173",
 ].filter(Boolean);
