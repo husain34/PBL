@@ -186,7 +186,7 @@ export default function Questionnaire() {
             <strong>{profiles.spenderType}</strong> spending style informs budgeting insights.
           </div>
 
-          <button onClick={() => navigate("/portfolio")} className="dashboard-primary-button w-full">
+          <button onClick={() => navigate("/income")} className="dashboard-primary-button w-full">
             <span className="dashboard-button-icon">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
                 <rect x="3" y="3" width="7" height="7" rx="1.5" />

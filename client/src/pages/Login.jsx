@@ -32,7 +32,7 @@ const Login = () => {
       );
 
       if (profileRes.data.profileCompleted) {
-        window.location.replace("/portfolio");
+        window.location.replace("/income");
       } else {
         window.location.replace("/profile-setup");
       }
