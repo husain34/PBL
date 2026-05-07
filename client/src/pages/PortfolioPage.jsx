@@ -143,7 +143,7 @@ export default function PortfolioPage() {
       setSectorAnalysis(null);
       setCorrelationAudit(null);
     } catch (err) {
-      setError(err.response?.data?.message || "Failed to add holding.");
+      setError(err.response?.data?.message || err.response?.data?.error || "Failed to add holding.");
     } finally {
       setLoading(false);
     }
