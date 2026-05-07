@@ -184,7 +184,8 @@ router.post("/", authMiddleware, async (req, res) => {
     if (error) throw error;
     res.status(201).json(formatHolding(holding));
   } catch (err) {
-    res.status(500).json({ error: "Failed to fetch stock data." });
+    console.error("Add stock error:", err);
+    res.status(500).json({ error: "Failed to fetch stock data. Details: " + err.message });
   }
 });
 
