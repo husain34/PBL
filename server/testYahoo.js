@@ -1,4 +1,4 @@
-const yahooFinance = require("yahoo-finance2");
+const yahooFinance = require("yahoo-finance2").default;
 
 console.log("Testing yahoo-finance2...");
 yahooFinance.quote("TCS.NS").then(q => {
