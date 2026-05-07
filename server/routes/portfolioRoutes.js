@@ -1,7 +1,7 @@
 const express = require("express");
 const jwt = require("jsonwebtoken");
 const supabase = require("../config/supabase");
-const yahooFinance = require("yahoo-finance2");
+const yahooFinance = require("yahoo-finance2").default;
 const { getStockCategory: getStockCategoryFromRanking, getCompanyName } = require("../utils/marketCapRanking");
 
 const router = express.Router();
